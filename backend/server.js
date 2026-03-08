@@ -62,6 +62,48 @@ app.post('/api/register', async (req, res) => {
   }
 });
 
+// Manual Analysis Endpoint for Frontend UI
+app.post('/api/analyze', async (req, res) => {
+  const { trackId, artistId, trackName, artistName, accessToken } = req.body;
+  
+  if (!trackId || !artistId || !accessToken) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  try {
+    console.log(`[Analyze] Manual analysis requested for: ${trackName} by ${artistName}`);
+    
+    // Fetch telemetry
+    const [artistData, totalReleases, relatedArtistCount, playlists] = await Promise.all([
+      getArtistData(accessToken, artistId),
+      getArtistAlbums(accessToken, artistId),
+      getRelatedArtists(accessToken, artistId),
+      searchPlaylists(accessToken, trackName, artistName)
+    ]);
+
+    const dossier = { trackName, artistName, artistData, relatedArtistCount, totalReleases, playlists };
+
+    // Run AI analysis
+    const analysis = await analyzeTrackWithAI(dossier);
+    if (!analysis) throw new Error("Gemini returned null analysis");
+
+    // Format like the frontend expects
+    const result = {
+      trackId: trackId,
+      aiLikelihood: analysis.aiLikelihood,
+      label: analysis.label,
+      reasons: analysis.reasons,
+      reasonCodes: ['AI_ASSESSMENT_COMPLETE'],
+      analyzedAt: new Date().toISOString()
+    };
+
+    res.json(result);
+  } catch (err) {
+    console.error('[Analyze] Error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // --- Spotify API Utilities ---
 
 async function refreshSpotifyToken(userId, refreshToken) {
@@ -119,6 +161,16 @@ async function getArtistData(accessToken, artistId) {
   return response.json();
 }
 
+async function getArtistAlbums(accessToken, artistId) {
+  if (!artistId) return 0;
+  const response = await fetch(`https://api.spotify.com/v1/artists/${artistId}/albums?limit=1`, {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
+  if (!response.ok) return 0;
+  const data = await response.json();
+  return data.total || 0;
+}
+
 async function getRelatedArtists(accessToken, artistId) {
   if (!artistId) return null;
   const response = await fetch(`https://api.spotify.com/v1/artists/${artistId}/related-artists`, {
@@ -143,7 +195,7 @@ async function searchPlaylists(accessToken, trackName, artistName) {
 
 async function analyzeTrackWithAI(dossier) {
   try {
-    const { trackName, artistName, artistData, relatedArtistCount, playlists } = dossier;
+    const { trackName, artistName, artistData, relatedArtistCount, totalReleases, playlists } = dossier;
     
     // Extract metadata safely
     const followers = artistData?.followers?.total || 0;
@@ -158,10 +210,9 @@ Track Name: "${trackName}"
 Artist Name: "${artistName}"
 
 == Spotify API Telemetry ==
-Artist Followers: ${followers}
-Artist Popularity Score: ${popularity}/100
+Total Releases (Albums/Singles): ${totalReleases}
 Artist Genres: ${genres.length > 0 ? genres.join(', ') : 'None listed'}
-Related Artists Count: ${relatedArtistCount} (Crucial human indicator)
+Related Artists Count: ${relatedArtistCount} (Crucial human indicator, if available)
 Public Playlists Found via Search: ${playlists.length > 0 ? playlists.join(' | ') : 'None found'}
 Profile Image URL: ${profileImageUrl}
 
@@ -169,15 +220,25 @@ Profile Image URL: ${profileImageUrl}
 You are an expert music industry analyst specializing in detecting synthetic/AI-generated music (e.g., Suno, Udio) exploiting streaming platforms.
 Analyze the provided dossier across the following pillars:
 
-1. Profile & Audience Metrics: Does this artist have a hyper-inflated number of releases but zero "Related Artists" or followers? 
-2. Semantic Patterns: Does the artist name follow compound AI pseudonyms (e.g., "Luna Echo", "Static Wave")? Do the playlists mentioning them have names like "AI Music"?
-3. Multimodal Visual Assessment: Analyze the provided Profile Image URL. Are there classic AI generation artifacts (DALL-E/Midjourney plastic skin, asymmetrical features, garbled text)? Note: Using AI art does not guarantee the music is AI, but it is a data point.
-4. Public Discourse & Internal LLM Knowledge: Search your internal training data. Do you recognize this artist as a real human musician? Are they discussed on Reddit/blogs? 
+1. Internal LLM Knowledge (PRIMARY PILLAR): Search your core training data. Do you recognize "${artistName}" as a real, established human musician? If the artist is highly famous (e.g., Post Malone, Kendrick Lamar, Taylor Swift) or a known indie act, classify as 'Likely Human' immediately.
+2. Release Velocity: Generative AI farms prioritize quantity over quality. If an obscure artist has a massive volume of releases (e.g., > 50) but 0 related artists and no playlist presence, this is highly indicative of an AI farm flooding the platform.
+3. Semantic Patterns: Does the artist name follow compound AI pseudonyms (e.g., "Luna Echo", "Static Wave")? Do the playlists mentioning them have names like "AI Music", "Suno", or "Udio"?
+4. Multimodal Visual Assessment: Analyze the provided Profile Image URL. Are there classic AI generation artifacts (DALL-E/Midjourney plastic skin, asymmetrical features, garbled text)? Note: Using AI art does not guarantee the music is AI, but it is a strong data point.
+5. THE NUCLEAR INNOCENCE RULE: If you do not explicitly recognize this artist from your training data, YOU MUST DEFAULT to 'Uncertain' or 'Likely Human' to protect obscure human artists. The ONLY exceptions allowing a 'Likely AI' classification are: 
+A) The artist name explicitly contains AI markers (e.g., "Suno", "Udio", "AI Music").
+B) The Profile Image contains EGREGIOUS, undeniable AI-generation hallmarks (specifically: mangled/garbled text attempting to look like English, impossible anatomy, or highly generic synthetic artifacts). Stylized cartoon/vector art is common for humans—only override this failsafe if the AI artifacting is objective and overwhelming.
+C) High Release Velocity (See Rule 2): If the artist has a massive number of releases but zero footprint.
+D) Grounded Search Verification: (SEE RULE 6)
+6. GOOGLE SEARCH GROUNDING (THE ULTIMATE TIEBREAKER): You are equipped with Google Search. If an artist is unknown, YOU MUST search the web for their name. You are looking for TWO things:
+   - A human footprint: A real indie human will almost ALWAYS have an Instagram, Bandcamp, TikTok, or local gig listed. If an artist has official streaming releases but ABSOLUTELY ZERO human social media footprint or biographical data anywhere on the internet, they are a mass-produced AI farm. 
+   - Public Exposure: Search explicitly for Reddit threads or music forum posts discussing if "${artistName}" is AI. If the artist has been "outed" by the community as a synthetic farm, you MUST classify as 'Likely AI'.
+If either the "void of existence" or public exposure is confirmed via search, you MAY OVERRIDE the Nuclear Innocence Rule and classify as 'Likely AI' (90%+).
+7. THE HYBRID IDENTITY RULE: Our goal is to detect synthetic *audio*. If Google Search reveals that an artist is a real, verified human, but they are explicitly using generative AI (Suno, Udio, Voice Clones) to create the *music or vocals* for this track, you MUST flag it as 'Likely AI'. A human identity does NOT protect synthetic audio.
 
 Gating Guardrails:
-- Many human indie artists start with 0 followers and 0 genres. Do not flag as AI *solely* for being unpopular.
+- Many genuine human indie artists start with 0 genres. Do not flag as AI *solely* for being unpopular.
 - Stylized names (DeadMau5) do not mean AI.
-- If the track is AI, formulate a 1-2 sentence compelling reason why.
+- Formulate a 1-2 sentence compelling reason for your classification. This reason will be shown directly to the user in the app, so it MUST be written in a friendly, conversational, non-jargon style. (e.g., "While Tim is a real rocker, it looks like he used AI tools to bring this specific track to life!" or "This anonymous artist is flooding the platform with hundreds of releases, a common sign of AI generation."). Do NOT use sterile, robotic analytical jargon like 'telemetry', 'dossier', 'multimodal analysis', or 'nuclear innocence rule'. Speak to the music fan.
 
 Return a strict JSON object classifying this track.`;
 
@@ -190,6 +251,7 @@ Return a strict JSON object classifying this track.`;
         }
       ],
       config: {
+        tools: [{ googleSearch: {} }],
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -311,6 +373,11 @@ async function pollUsers() {
         relatedArtistCount = await getRelatedArtists(token, artistId);
       }
 
+      let totalReleases = 0;
+      if (artistId) {
+        totalReleases = await getArtistAlbums(token, artistId);
+      }
+
       playlists = await searchPlaylists(token, trackName, artistName);
 
       const dossier = {
@@ -318,6 +385,7 @@ async function pollUsers() {
         artistName,
         artistData,
         relatedArtistCount,
+        totalReleases,
         playlists
       };
 
