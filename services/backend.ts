@@ -51,8 +51,8 @@ export async function registerForPushNotificationsAsync() {
         })
       ).data;
       console.log('[BackendService] Expo push token:', token);
-    } catch (e) {
-      console.error('[BackendService] Error fetching push token:', e);
+    } catch (e: any) {
+      console.log('[BackendService] Push token skipped (Firebase not configured):', e.message);
     }
   } else {
     console.log('[BackendService] Must use physical device for Push Notifications');
@@ -94,5 +94,40 @@ export async function registerUserWithBackend(
   } catch (error) {
     console.error('[BackendService] Error connecting to backend:', error);
     return false;
+  }
+}
+
+export async function analyzeTrackWithBackend(
+  trackId: string,
+  artistId: string,
+  trackName: string,
+  artistName: string,
+  accessToken: string
+) {
+  try {
+    const response = await fetch(`${BACKEND_URL}/api/analyze`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        trackId,
+        artistId,
+        trackName,
+        artistName,
+        accessToken,
+      }),
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      console.error('[BackendService] /api/analyze failed:', text);
+      return null;
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('[BackendService] Error calling /api/analyze:', error);
+    return null;
   }
 }

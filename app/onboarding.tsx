@@ -69,43 +69,6 @@ export default function OnboardingScreen() {
   const slideAnim = useRef(new Animated.Value(0)).current;
 
   const [request, response, promptAsync] = useSpotifyAuthRequest();
-
-  useEffect(() => {
-    if (response?.type === 'success' && response.params?.code) {
-      handleSpotifyCallback(response.params.code);
-    } else if (response?.type === 'error') {
-      console.error('[Onboarding] Spotify auth error:', response.error);
-      setConnectError('Failed to connect Spotify. Please try again.');
-      setIsConnecting(false);
-    } else if (response?.type === 'dismiss') {
-      setIsConnecting(false);
-    }
-  }, [response, handleSpotifyCallback]);
-
-  const handleSpotifyCallback = useCallback(async (code: string) => {
-    if (!request?.codeVerifier) {
-      console.error('[Onboarding] No code verifier available');
-      setConnectError('Authentication error. Please try again.');
-      setIsConnecting(false);
-      return;
-    }
-
-    console.log('[Onboarding] Exchanging code for token...');
-    const result = await exchangeCodeForToken(code, request.codeVerifier);
-
-
-    if (result) {
-      console.log('[Onboarding] Spotify connected successfully!');
-      updateSettings({ spotifyConnected: true });
-      setIsConnecting(false);
-      setConnectError(null);
-      animateTransition(step + 1);
-    } else {
-      setConnectError('Failed to connect Spotify. Please try again.');
-      setIsConnecting(false);
-    }
-  }, [request, updateSettings, router]);
-
   const animateTransition = useCallback((nextStep: number) => {
     Animated.parallel([
       Animated.timing(fadeAnim, { toValue: 0, duration: 150, useNativeDriver: true }),
@@ -119,6 +82,41 @@ export default function OnboardingScreen() {
       ]).start();
     });
   }, [fadeAnim, slideAnim]);
+
+  const handleSpotifyCallback = useCallback(async (code: string) => {
+    if (!request?.codeVerifier) {
+      console.error('[Onboarding] No code verifier available');
+      setConnectError('Authentication error. Please try again.');
+      setIsConnecting(false);
+      return;
+    }
+
+    console.log('[Onboarding] Exchanging code for token...');
+    const result = await exchangeCodeForToken(code, request.codeVerifier);
+
+    if (result) {
+      console.log('[Onboarding] Spotify connected successfully!');
+      updateSettings({ spotifyConnected: true });
+      setIsConnecting(false);
+      setConnectError(null);
+      animateTransition(step + 1);
+    } else {
+      setConnectError('Failed to connect Spotify. Please try again.');
+      setIsConnecting(false);
+    }
+  }, [request, updateSettings, router, animateTransition, step]);
+
+  useEffect(() => {
+    if (response?.type === 'success' && response.params?.code) {
+      handleSpotifyCallback(response.params.code);
+    } else if (response?.type === 'error') {
+      console.error('[Onboarding] Spotify auth error:', response.error);
+      setConnectError('Failed to connect Spotify. Please try again.');
+      setIsConnecting(false);
+    } else if (response?.type === 'dismiss') {
+      setIsConnecting(false);
+    }
+  }, [response, handleSpotifyCallback]);
 
   const handleNext = useCallback(async () => {
     if (Platform.OS !== 'web') {

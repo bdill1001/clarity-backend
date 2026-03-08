@@ -23,10 +23,12 @@ export const spotifyDiscovery = {
 
 export const spotifyRedirectUri = AuthSession.makeRedirectUri({
   scheme: 'clarity-app',
+  path: 'callback',
 });
 
 export function useSpotifyAuthRequest() {
   console.log('[Spotify] Creating auth request with redirect:', spotifyRedirectUri);
+  console.log('[Spotify] Loaded Client ID length:', SPOTIFY_CLIENT_ID.length);
   return AuthSession.useAuthRequest(
     {
       clientId: SPOTIFY_CLIENT_ID,

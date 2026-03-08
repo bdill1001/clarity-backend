@@ -40,15 +40,7 @@ export default function SettingsScreen() {
 
   const [request, response, promptAsync] = useSpotifyAuthRequest();
 
-  useEffect(() => {
-    if (response?.type === 'success' && response.params?.code) {
-      handleSpotifyCallback(response.params.code);
-    } else if (response?.type === 'error' || response?.type === 'dismiss') {
-      setIsConnecting(false);
-    }
-  }, [response, handleSpotifyCallback]);
-
-  const handleSpotifyCallback = async (code: string) => {
+  const handleSpotifyCallback = useCallback(async (code: string) => {
     if (!request?.codeVerifier) {
       setIsConnecting(false);
       return;
@@ -56,13 +48,21 @@ export default function SettingsScreen() {
 
     const result = await exchangeCodeForToken(code, request.codeVerifier);
     if (result) {
-      updateSettings({ spotifyConnected: true });
+      updateSettings({ spotifyConnected: true, isOnboarded: true });
       console.log('[Settings] Spotify connected successfully');
     } else {
       Alert.alert('Connection Failed', 'Could not connect to Spotify. Please try again.');
     }
     setIsConnecting(false);
-  };
+  }, [request, updateSettings]);
+
+  useEffect(() => {
+    if (response?.type === 'success' && response.params?.code) {
+      handleSpotifyCallback(response.params.code);
+    } else if (response?.type === 'error' || response?.type === 'dismiss') {
+      setIsConnecting(false);
+    }
+  }, [response, handleSpotifyCallback]);
 
   const handleConnectSpotify = useCallback(async () => {
     setIsConnecting(true);

@@ -4,9 +4,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import createContextHook from '@nkzw/create-context-hook';
 import { AppSettings, DEFAULT_SETTINGS, AnalyzedTrack, UserFeedback, Track, AnalysisResult } from '@/types';
-import { analyzeTrackWithAI } from '@/utils/analysis';
 import { fetchNowPlaying, hasStoredTokens, clearTokens, validateStoredTokens, getStoredTokens } from '@/services/spotify';
-import { registerForPushNotificationsAsync, registerUserWithBackend } from '@/services/backend';
+import { analyzeTrackWithBackend, registerForPushNotificationsAsync, registerUserWithBackend } from '@/services/backend';
 
 const SETTINGS_KEY = 'clarity_settings';
 const HISTORY_KEY = 'clarity_history';
@@ -135,12 +134,26 @@ export const [AppProvider, useApp] = createContextHook(() => {
   }, [feedback]);
 
   const enrichAndAnalyze = useCallback(async (track: Track) => {
-    console.log(`[App] Analyzing track locally for UI update: "${track.name}"`);
+    console.log(`[App] Requesting backend analysis for: "${track.name}"`);
     setIsAnalyzing(true);
     try {
-      const analysis = await analyzeTrackWithAI(track);
-      setCurrentAnalysis(analysis);
-      addToHistory({ track, analysis });
+      const tokens = await getStoredTokens();
+      if (!tokens) throw new Error("No stored tokens");
+
+      const analysis = await analyzeTrackWithBackend(
+        track.id,
+        track.artistIds[0],
+        track.name,
+        track.artist,
+        tokens.accessToken
+      );
+
+      if (analysis) {
+        setCurrentAnalysis(analysis);
+        addToHistory({ track, analysis });
+      } else {
+        console.error('[App] Backend analysis returned null');
+      }
     } catch (error) {
       console.error('[App] Enrichment/analysis error:', error);
     } finally {
@@ -161,9 +174,22 @@ export const [AppProvider, useApp] = createContextHook(() => {
     }
 
     try {
+      let spotifyId = 'user_' + Math.random().toString(36).substring(7);
+      try {
+        const response = await fetch('https://api.spotify.com/v1/me', {
+          headers: { Authorization: `Bearer ${tokens.accessToken}` }
+        });
+        if (response.ok) {
+          const profile = await response.json();
+          spotifyId = profile.id;
+        }
+      } catch (err) {
+        console.error('[App] Failed to fetch real Spotify ID:', err);
+      }
+
       const pushToken = await registerForPushNotificationsAsync();
       const success = await registerUserWithBackend(
-        'user_' + Math.random().toString(36).substring(7), // Temporary ID until we fetch profile
+        spotifyId,
         tokens.accessToken,
         tokens.refreshToken,
         pushToken || null
