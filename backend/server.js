@@ -239,8 +239,13 @@ Gating Guardrails:
 - Many genuine human indie artists start with 0 genres. Do not flag as AI *solely* for being unpopular.
 - Stylized names (DeadMau5) do not mean AI.
 - Formulate a 1-2 sentence compelling reason for your classification. This reason will be shown directly to the user in the app, so it MUST be written in a friendly, conversational, non-jargon style. (e.g., "While Tim is a real rocker, it looks like he used AI tools to bring this specific track to life!" or "This anonymous artist is flooding the platform with hundreds of releases, a common sign of AI generation."). Do NOT use sterile, robotic analytical jargon like 'telemetry', 'dossier', 'multimodal analysis', or 'nuclear innocence rule'. Speak to the music fan.
-
-Return a strict JSON object classifying this track.`;
+Return ONLY a strict JSON object classifying this track, with no markdown formatting or backticks. It must contain EXACTLY these keys:
+{
+  "aiLikelihood": 0-100 (integer representing AI probability),
+  "isRecognizedArtist": true/false,
+  "label": "Likely Human" | "Uncertain" | "Likely AI",
+  "reasons": ["1-2 sentences explaining reasoning"]
+}`;
 
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-pro',
@@ -252,37 +257,17 @@ Return a strict JSON object classifying this track.`;
       ],
       config: {
         tools: [{ googleSearch: {} }],
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            aiLikelihood: {
-              type: Type.INTEGER,
-              description: "A number from 0 to 100 representing the likelihood this is AI generated."
-            },
-            isRecognizedArtist: {
-              type: Type.BOOLEAN,
-              description: "Whether you explicitly recognize this artist from your training data."
-            },
-            label: {
-              type: Type.STRING,
-              description: "Must be exactly 'Likely Human', 'Uncertain', or 'Likely AI'"
-            },
-            reasons: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING },
-              description: "A list of reasons (1-2 sentences each) justifying your score."
-            }
-          },
-          required: ["aiLikelihood", "isRecognizedArtist", "label", "reasons"]
-        }
+        temperature: 0.2
       }
     });
 
-    const responseText = response.text();
+    const responseText = response.text;
     if (!responseText) throw new Error("Empty response from Gemini");
 
-    return JSON.parse(responseText);
+    let textResp = responseText;
+    textResp = textResp.replace(/```json/g, '').replace(/```/g, '').trim();
+    const analysis = JSON.parse(textResp);
+    return analysis;
   } catch (error) {
     console.error('[Gemini] Analysis failed:', error.message);
     return null;
