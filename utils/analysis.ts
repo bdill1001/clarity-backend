@@ -1,14 +1,4 @@
-import { z } from 'zod';
 import { Track, AnalysisResult } from '@/types';
-
-const analysisSchema = z.object({
-  aiLikelihood: z.number().min(1).max(99).describe('Percentage likelihood that this track is AI-generated (1-99). Use the FULL range based on evidence.'),
-  label: z.enum(['Likely Human', 'Uncertain', 'Likely AI']).describe('Classification label'),
-  reasons: z.array(z.string()).min(1).max(6).describe('Top reasons for the classification, each 1-2 sentences'),
-  reasonCodes: z.array(z.string()).max(6).describe('Short code identifiers for each reason'),
-  isRecognizedArtist: z.boolean().describe('Set to true ONLY if you personally recognize this artist from your training data as a real human musician at any level of fame'),
-  recognitionConfidence: z.enum(['none', 'low', 'medium', 'high']).describe('How confident are you that you recognize this artist? none=never heard of them, low=vaguely familiar, medium=fairly sure, high=definitely know them'),
-});
 
 const AI_NAME_KEYWORDS = [
   /\bai\b/i, /\ba\.i\b/i, /\bbot\b/i, /\bneural\b/i, /\bsynthetic\b/i,
