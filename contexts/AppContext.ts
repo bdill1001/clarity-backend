@@ -3,6 +3,7 @@ import { AppState, AppStateStatus } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import createContextHook from '@nkzw/create-context-hook';
+import * as Notifications from 'expo-notifications';
 import { AppSettings, DEFAULT_SETTINGS, AnalyzedTrack, UserFeedback, Track, AnalysisResult } from '@/types';
 import { fetchNowPlaying, hasStoredTokens, clearTokens, validateStoredTokens, getStoredTokens } from '@/services/spotify';
 import { analyzeTrackWithBackend, registerForPushNotificationsAsync, registerUserWithBackend } from '@/services/backend';
@@ -210,6 +211,31 @@ export const [AppProvider, useApp] = createContextHook(() => {
     // TODO: Send a deregister or inactive flag to the backend if needed
   }, []);
 
+  const silentPoll = useCallback(async () => {
+    if (!settings.spotifyConnected || !settings.isOnboarded) return;
+    try {
+      const result = await fetchNowPlaying();
+      if (result.track) {
+        if (lastTrackIdRef.current !== result.track.id) {
+          console.log('[App] Silent Auto-Poll detected new track:', result.track.name);
+          lastTrackIdRef.current = result.track.id;
+          setCurrentTrack(result.track);
+          setCurrentAnalysis(null);
+          setIsAnalyzing(true);
+          // We rely on the backend worker to push the notification with the analysis.
+        }
+      } else {
+        if (lastTrackIdRef.current !== null) {
+          lastTrackIdRef.current = null;
+          setCurrentTrack(null);
+          setCurrentAnalysis(null);
+        }
+      }
+    } catch (e) {
+      console.warn('[App] Silent poll error bypassed:', e);
+    }
+  }, [settings.spotifyConnected, settings.isOnboarded]);
+
   const refreshNowPlaying = useCallback(async () => {
     console.log('[App] Manual refresh triggered');
     setSpotifyError(null);
@@ -249,7 +275,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
             setCurrentTrack(retryResult.track);
             setCurrentAnalysis(null);
             if (!settings.spotifyConnected) updateSettings({ spotifyConnected: true });
-            enrichAndAnalyze(retryResult.track);
+            enrichAndAnalyze(retryResult.track); // Explicit manual override demands immediate analysis
           } else {
             setSpotifyError(retryResult.error || 'No track playing on Spotify right now.');
           }
@@ -261,7 +287,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
         setCurrentTrack(result.track);
         setCurrentAnalysis(null);
         if (!settings.spotifyConnected) updateSettings({ spotifyConnected: true });
-        enrichAndAnalyze(result.track);
+        enrichAndAnalyze(result.track); // Explicit manual override demands immediate analysis
       } else {
         console.log('[App] Manual refresh: no track playing');
         setCurrentTrack(null);
@@ -281,22 +307,34 @@ export const [AppProvider, useApp] = createContextHook(() => {
   }, [updateSettings, settings.spotifyConnected, settings.isOnboarded, startPolling, stopPolling, enrichAndAnalyze]);
 
   useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    let pollTimer: ReturnType<typeof setInterval>;
+
     if (settings.spotifyConnected && settings.isOnboarded) {
-      console.log('[App] Spotify connected & onboarded, starting polling...');
+      console.log('[App] Spotify connected & onboarded, starting backend link and local silent poll...');
       stopPolling();
-      const timer = setTimeout(() => {
-        startPolling();
+      timer = setTimeout(() => {
+        startPolling(); // Fire backend telemetry
       }, 200);
-      return () => {
-        clearTimeout(timer);
-        stopPolling();
-      };
+
+      // 10s silent local poll loop
+      pollTimer = setInterval(() => {
+        if (AppState.currentState === 'active') {
+          silentPoll();
+        }
+      }, 10000);
+
     } else {
       console.log('[App] Not connected or not onboarded, stopping polling');
       stopPolling();
-      return () => stopPolling();
     }
-  }, [settings.spotifyConnected, settings.isOnboarded, startPolling, stopPolling]);
+
+    return () => {
+      clearTimeout(timer);
+      clearInterval(pollTimer);
+      stopPolling();
+    };
+  }, [settings.spotifyConnected, settings.isOnboarded, startPolling, stopPolling, silentPoll]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', async (nextState: AppStateStatus) => {
@@ -304,8 +342,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
         console.log('[App] App became active, updating current playing track...');
         setSpotifyError(null);
         setSessionExpired(false);
-        refreshNowPlaying(); // Do a one-off fetch to show the user what's playing when they open the app
-
+        silentPoll(); // Use silent poll instead of manual refresh to avoid dual Gemini billing
 
         const hasTokens = await hasStoredTokens();
         if (!hasTokens) {
@@ -332,8 +369,26 @@ export const [AppProvider, useApp] = createContextHook(() => {
         }
       }
     });
-    return () => subscription.remove();
-  }, [settings.spotifyConnected, settings.isOnboarded, startPolling, stopPolling, updateSettings]);
+
+    // Sub to push notification UI payloads
+    const notifSub = Notifications.addNotificationReceivedListener(notification => {
+      console.log('[App] Notification received payload:', notification.request.content.data);
+      const data = notification.request.content.data;
+      if (data && data.trackId && data.analysis) {
+        // If the push matches the current UI track, hydrate immediately!
+        if (lastTrackIdRef.current === data.trackId) {
+          console.log('[App] Hydrating UI with push payload scores!');
+          setCurrentAnalysis(data.analysis as AnalysisResult);
+          setIsAnalyzing(false);
+        }
+      }
+    });
+
+    return () => {
+      subscription.remove();
+      notifSub.remove();
+    };
+  }, [settings.spotifyConnected, settings.isOnboarded, startPolling, stopPolling, updateSettings, silentPoll]);
 
   useEffect(() => {
     if (!settingsLoadedRef.current) {
