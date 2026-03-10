@@ -87,9 +87,9 @@ app.post('/api/analyze', async (req, res) => {
 
     const dossier = { trackName, artistName, artistData, relatedArtistCount, totalReleases, playlists };
 
-    // Run AI analysis
+    // Run AI analysis (this will throw if it crashes internally)
     const analysis = await analyzeTrackWithAI(dossier);
-    if (!analysis) throw new Error("Gemini returned null analysis");
+    if (!analysis) throw new Error("Gemini returned null analysis object");
 
     // Format like the frontend expects
     const result = {
@@ -274,7 +274,7 @@ Return ONLY a strict JSON object classifying this track, with no markdown format
     return analysis;
   } catch (error) {
     console.error('[Gemini] Analysis failed:', error.message);
-    return null;
+    throw new Error(`[Gemini] ${error.message}`);
   }
 }
 
