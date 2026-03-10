@@ -234,13 +234,14 @@ B) The Profile Image contains EGREGIOUS, undeniable AI-generation hallmarks (spe
 C) High Release Velocity (See Rule 2): If the artist has a massive number of releases but zero footprint.
 D) Grounded Search Verification: (SEE RULE 6)
 6. GOOGLE SEARCH GROUNDING (THE ULTIMATE TIEBREAKER): You are equipped with Google Search. If an artist is unknown, YOU MUST search the web for their name. You are looking for TWO things:
-   - A human footprint: A real indie human will almost ALWAYS have an Instagram, Bandcamp, TikTok, or local gig listed. If an artist has official streaming releases but ABSOLUTELY ZERO human social media footprint or biographical data anywhere on the internet, they are a mass-produced AI farm. 
+   - A human footprint: A real indie human will almost ALWAYS have an Instagram, Bandcamp, TikTok, or local gig listed. However, brand new humans might not have a strong Web Presence yet. If an artist has official streaming releases but ABSOLUTELY ZERO human social media footprint OR biographical data anywhere on the internet, they MIGHT be a mass-produced AI farm. **CRITICAL:** You can ONLY penalize an artist for a "Void of Existence" if their Release Velocity is suspiciously high (e.g., > 10 releases). If they have less than 10 releases and no footprint, you MUST default to "Uncertain" or "Likely Human" (Protecting brand new/local artists).
    - Public Exposure: Search explicitly for Reddit threads or music forum posts discussing if "${artistName}" is AI. If the artist has been "outed" by the community as a synthetic farm, you MUST classify as 'Likely AI'.
-If either the "void of existence" or public exposure is confirmed via search, you MAY OVERRIDE the Nuclear Innocence Rule and classify as 'Likely AI' (90%+).
+If EITHER the public exposure is confirmed, OR the "void of existence" is confirmed ALONGSIDE high Release Velocity, you MAY OVERRIDE the Nuclear Innocence Rule and classify as 'Likely AI' (90%+).
 7. THE HYBRID IDENTITY RULE: Our goal is to detect synthetic *audio*. If Google Search reveals that an artist is a real, verified human, but they are explicitly using generative AI (Suno, Udio, Voice Clones) to create the *music or vocals* for this track, you MUST flag it as 'Likely AI'. A human identity does NOT protect synthetic audio.
 
 Gating Guardrails:
-- Many genuine human indie artists start with 0 genres. Do not flag as AI *solely* for being unpopular.
+- Many genuine human indie artists start with 0 genres and 0 related artists. Do not flag as AI *solely* for being unpopular or isolated.
+- Brand new human artists often have NO social media presence and 1-5 track releases. You MUST protect them with the Nuclear Innocence Rule.
 - Stylized names (DeadMau5) do not mean AI.
 - Formulate a 1-2 sentence compelling reason for your classification. This reason will be shown directly to the user in the app, so it MUST be written in a friendly, conversational, non-jargon style. (e.g., "While Tim is a real rocker, it looks like he used AI tools to bring this specific track to life!" or "This anonymous artist is flooding the platform with hundreds of releases, a common sign of AI generation."). Do NOT use sterile, robotic analytical jargon like 'telemetry', 'dossier', 'multimodal analysis', or 'nuclear innocence rule'. Speak to the music fan.
 Return ONLY a strict JSON object classifying this track, with no markdown formatting or backticks. It must contain EXACTLY these keys:
