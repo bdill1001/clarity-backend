@@ -223,6 +223,16 @@ export const [AppProvider, useApp] = createContextHook(() => {
           setCurrentAnalysis(null);
           setIsAnalyzing(true);
           // We rely on the backend worker to push the notification with the analysis.
+          // Fallback: If the backend fast-paths it and DOESN'T send a push, clear the spinner after 8s
+          setTimeout(() => {
+            setIsAnalyzing((prev) => {
+              if (prev && lastTrackIdRef.current === result.track?.id) {
+                console.log('[App] Fallback timeout: Un-spinning UI. Backend likely ignored a famous human track.');
+                return false;
+              }
+              return prev;
+            });
+          }, 8000);
         }
       } else {
         if (lastTrackIdRef.current !== null) {
