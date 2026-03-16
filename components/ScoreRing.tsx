@@ -9,9 +9,16 @@ interface ScoreRingProps {
   size?: number;
   strokeWidth?: number;
   label: string;
+  showPercentage?: boolean;
 }
 
-export default function ScoreRing({ score, size = 200, strokeWidth = 12, label }: ScoreRingProps) {
+export default function ScoreRing({ 
+  score, 
+  size = 200, 
+  strokeWidth = 12, 
+  label,
+  showPercentage = true
+}: ScoreRingProps) {
   const animatedValue = useRef(new Animated.Value(0)).current;
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
@@ -55,8 +62,8 @@ export default function ScoreRing({ score, size = 200, strokeWidth = 12, label }
         />
       </Svg>
       <View style={styles.center}>
-        <Text style={[styles.scoreText, { color }]}>{score}%</Text>
-        <Text style={[styles.labelText, { color }]}>{label}</Text>
+        {showPercentage && <Text style={[styles.scoreText, { color }]}>{score}%</Text>}
+        <Text style={[styles.labelText, { color, marginTop: showPercentage ? 2 : 0 }]}>{label}</Text>
       </View>
       <View style={[styles.glow, { backgroundColor: color, opacity: 0.06 }]} />
     </View>

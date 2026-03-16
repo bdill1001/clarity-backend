@@ -5,6 +5,7 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Clock, Filter } from 'lucide-react-native';
@@ -12,17 +13,19 @@ import Colors from '@/constants/colors';
 import { useApp } from '@/contexts/AppContext';
 import { FilterType, AnalyzedTrack } from '@/types';
 import TrackCard from '@/components/TrackCard';
+import { getLabelColor } from '@/utils/analysis';
 
 const FILTERS: { key: FilterType; label: string; color: string }[] = [
   { key: 'all', label: 'All', color: Colors.text },
   { key: 'ai', label: 'Likely AI', color: Colors.ai },
-  { key: 'uncertain', label: 'Uncertain', color: Colors.uncertain },
+  { key: 'unsure', label: 'Unsure', color: Colors.uncertain },
   { key: 'human', label: 'Human', color: Colors.human },
 ];
 
 export default function HistoryScreen() {
   const { history } = useApp();
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
+  const [selectedTrack, setSelectedTrack] = useState<AnalyzedTrack | null>(null);
 
   const filteredHistory = useMemo(() => {
     if (activeFilter === 'all') return history;
@@ -30,8 +33,9 @@ export default function HistoryScreen() {
       switch (activeFilter) {
         case 'ai':
           return item.analysis.label === 'Likely AI';
-        case 'uncertain':
-          return item.analysis.label === 'Uncertain';
+        case 'unsure':
+          // Support both new "Unsure" and legacy "Uncertain" results
+          return (item.analysis.label as string) === 'Unsure' || (item.analysis.label as string) === 'Uncertain';
         case 'human':
           return item.analysis.label === 'Likely Human';
         default:
@@ -41,10 +45,10 @@ export default function HistoryScreen() {
   }, [history, activeFilter]);
 
   const renderItem = useCallback(({ item }: { item: AnalyzedTrack }) => {
-    return <TrackCard item={item} />;
+    return <TrackCard item={item} onPress={() => setSelectedTrack(item)} />;
   }, []);
 
-  const keyExtractor = useCallback((item: AnalyzedTrack) => item.track.id, []);
+  const keyExtractor = useCallback((item: AnalyzedTrack) => item.track.id + item.analysis.analyzedAt, []);
 
   return (
     <View style={styles.root}>
@@ -99,12 +103,63 @@ export default function HistoryScreen() {
               <Text style={styles.emptyText}>
                 {activeFilter === 'all'
                   ? 'Analyzed tracks will appear here. Start playing music on Spotify!'
-                  : `No ${activeFilter === 'ai' ? 'AI-detected' : activeFilter === 'human' ? 'human-detected' : 'uncertain'} tracks found.`}
+                  : `No ${activeFilter === 'ai' ? 'AI-detected' : activeFilter === 'human' ? 'human-detected' : 'unsure'} tracks found.`}
               </Text>
             </View>
           }
         />
       </SafeAreaView>
+
+      {/* Forensic Detail Modal */}
+      {selectedTrack && (
+        <View style={styles.modalOverlay}>
+          <SafeAreaView style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Forensic Profile</Text>
+              <TouchableOpacity
+                onPress={() => setSelectedTrack(null)}
+                style={styles.closeButton}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.closeButtonText}>Close</Text>
+              </TouchableOpacity>
+            </View>
+            
+            <ScrollView contentContainerStyle={styles.modalScroll}>
+              <View style={styles.trackSummary}>
+                <Text style={styles.trackName}>{selectedTrack.track.name}</Text>
+                <Text style={styles.artistName}>{selectedTrack.track.artist}</Text>
+                <View style={[styles.labelBadge, { backgroundColor: getLabelColor(selectedTrack.analysis.label) + '20' }]}>
+                  <Text style={[styles.labelText, { color: getLabelColor(selectedTrack.analysis.label) }]}>
+                    {selectedTrack.analysis.label}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.forensicContent}>
+                <View style={styles.percentageRow}>
+                  <Text style={styles.percentageLabel}>Confidence Score</Text>
+                  <Text style={[styles.percentageValue, { color: getLabelColor(selectedTrack.analysis.label) }]}>
+                    {selectedTrack.analysis.aiLikelihood}%
+                  </Text>
+                </View>
+                
+                {selectedTrack.analysis.reasons.length > 0 && (
+                  <View style={styles.reasonsSection}>
+                    <Text style={styles.forensicSectionTitle}>Forensic Signals</Text>
+                    {selectedTrack.analysis.reasons.map((reason, index) => (
+                      <View key={index} style={styles.reasonCard}>
+                        <View style={[styles.reasonDot, { backgroundColor: getLabelColor(selectedTrack.analysis.label) }]} />
+                        <Text style={styles.reasonText}>{reason}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
+            </ScrollView>
+          </SafeAreaView>
+        </View>
+      )}
     </View>
   );
 }
@@ -180,5 +235,122 @@ const styles = StyleSheet.create({
     textAlign: 'center' as const,
     lineHeight: 20,
     marginTop: 8,
+  },
+  modalOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    zIndex: 1000,
+  },
+  modalContainer: {
+    flex: 1,
+    marginTop: 60,
+    backgroundColor: Colors.background,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+  },
+  modalHeader: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.surfaceBorder,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700' as const,
+    color: Colors.text,
+  },
+  closeButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: Colors.surface,
+    borderRadius: 8,
+  },
+  closeButtonText: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: Colors.accent,
+  },
+  modalScroll: {
+    padding: 24,
+  },
+  trackSummary: {
+    alignItems: 'center',
+    marginBottom: 32,
+  },
+  trackName: {
+    fontSize: 22,
+    fontWeight: '700' as const,
+    color: Colors.text,
+    textAlign: 'center' as const,
+  },
+  artistName: {
+    fontSize: 16,
+    color: Colors.textSecondary,
+    marginTop: 4,
+  },
+  labelBadge: {
+    marginTop: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  labelText: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+    textTransform: 'uppercase' as const,
+  },
+  forensicContent: {
+    backgroundColor: Colors.surface,
+    borderRadius: 16,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: Colors.surfaceBorder,
+  },
+  percentageRow: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+    marginBottom: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.surfaceBorder,
+  },
+  percentageLabel: {
+    fontSize: 15,
+    color: Colors.textSecondary,
+    fontWeight: '500' as const,
+  },
+  percentageValue: {
+    fontSize: 28,
+    fontWeight: '700' as const,
+  },
+  reasonsSection: {},
+  forensicSectionTitle: {
+    fontSize: 11,
+    fontWeight: '700' as const,
+    color: Colors.textTertiary,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 1,
+    marginBottom: 12,
+  },
+  reasonCard: {
+    flexDirection: 'row' as const,
+    alignItems: 'flex-start',
+    marginBottom: 10,
+  },
+  reasonDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginTop: 7,
+    marginRight: 10,
+  },
+  reasonText: {
+    flex: 1,
+    fontSize: 14,
+    color: Colors.textSecondary,
+    lineHeight: 20,
   },
 });

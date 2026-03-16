@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { X, Cpu, BarChart3, AlertCircle } from 'lucide-react-native';
+import { X, Shield, Search, Binary, ShieldCheck } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 
 export default function HowItWorksScreen() {
@@ -12,7 +12,7 @@ export default function HowItWorksScreen() {
     <View style={styles.root}>
       <SafeAreaView style={styles.safe} edges={['top']}>
         <View style={styles.header}>
-          <Text style={styles.title}>How Clarity Works</Text>
+          <Text style={styles.title}>Forensic Engine</Text>
           <TouchableOpacity
             onPress={() => router.back()}
             style={styles.closeButton}
@@ -28,47 +28,58 @@ export default function HowItWorksScreen() {
         >
           <View style={styles.section}>
             <View style={styles.iconRow}>
-              <Cpu size={24} color={Colors.accent} />
-              <Text style={styles.sectionTitle}>Metadata Analysis</Text>
+              <Binary size={24} color={Colors.accent} />
+              <Text style={styles.sectionTitle}>The Multi-Layered Engine</Text>
             </View>
             <Text style={styles.text}>
-              Clarity analyzes publicly available Spotify metadata for each track — including release patterns, artist catalog data, naming conventions, popularity metrics, and label information.
+              Clarity does not "listen" to audio. Instead, it acts as a forensic scanner, analyzing the digital footprint of artists and tracks to distinguish between human creativity and synthetic generation.
             </Text>
           </View>
 
           <View style={styles.section}>
             <View style={styles.iconRow}>
-              <BarChart3 size={24} color={Colors.warning} />
-              <Text style={styles.sectionTitle}>Heuristic Scoring</Text>
+              <Search size={24} color={Colors.warning} />
+              <Text style={styles.sectionTitle}>Verification Pillars</Text>
             </View>
             <Text style={styles.text}>
-              We use a deterministic scoring system that evaluates multiple signals simultaneously. Each signal contributes to an overall AI-likelihood score from 0 to 100%.
+              Our engine cross-references dozens of signals across 4 key forensic pillars to reach a high-confidence assessment:
             </Text>
             <View style={styles.signalList}>
-              <SignalItem label="Release frequency" description="Unusually high volume of releases" />
-              <SignalItem label="Naming patterns" description="Repetitive or templated track/album names" />
-              <SignalItem label="Listener metrics" description="Low engagement relative to catalog size" />
-              <SignalItem label="Label signals" description="Distribution through known AI pipelines" />
-              <SignalItem label="Catalog growth" description="Abnormal growth rate patterns" />
+              <SignalItem 
+                label="Artist Identity" 
+                description="Analysis of 'Nuclear Innocence' — checking related artists, genre richness, and historical catalog data." 
+              />
+              <SignalItem 
+                label="Synthetic Patterns" 
+                description="Scanning for known AI-generated compound naming conventions and metadata templates." 
+              />
+              <SignalItem 
+                label="Release Velocity" 
+                description="Identifying 'farm' behaviors like inhuman release frequencies and singles-only distribution." 
+              />
+              <SignalItem 
+                label="External Grounding" 
+                description="Corroborating data against community intelligence and known AI-generation platforms." 
+              />
             </View>
           </View>
 
           <View style={styles.section}>
             <View style={styles.iconRow}>
-              <AlertCircle size={24} color={Colors.ai} />
-              <Text style={styles.sectionTitle}>Important Disclaimers</Text>
+              <ShieldCheck size={24} color={Colors.human} />
+              <Text style={styles.sectionTitle}>The Innocence Protocol</Text>
             </View>
             <Text style={styles.text}>
-              Clarity provides a likelihood estimate — not definitive proof. Our analysis is based solely on metadata patterns and cannot detect AI-generated audio directly.
+              Clarity is designed to protect human artists first. If an artist's digital footprint is small but potentially human, the engine defaults to 'Unsure' or 'Human' rather than 'Likely AI'.
             </Text>
             <Text style={[styles.text, { marginTop: 8 }]}>
-              False positives can occur with independent artists, new releases, or niche genres. Your feedback helps us improve accuracy over time.
+              A 'Likely AI' result requires multiple independent forensic corroborations to clear our high-confidence gate.
             </Text>
           </View>
 
           <View style={styles.disclaimerBox}>
             <Text style={styles.disclaimerText}>
-              This tool is for informational purposes only. AI-likelihood scores should not be used as the sole basis for any decision about music or artists.
+              Forensic tools provide likelihood based on patterns, not definitive proof. False positives can occur, especially with new independent human artists.
             </Text>
           </View>
         </ScrollView>

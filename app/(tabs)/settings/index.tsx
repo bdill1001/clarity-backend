@@ -22,7 +22,6 @@ import {
   CreditCard,
   ChevronRight,
   Smartphone,
-  AlertTriangle,
   Music,
   LogOut,
   Unlink,
@@ -31,8 +30,7 @@ import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 const SPOTIFY_CLIENT_ID = process.env.EXPO_PUBLIC_SPOTIFY_CLIENT_ID || '';
 import { useApp } from '@/contexts/AppContext';
-import { useSpotifyAuthRequest, exchangeCodeForToken, spotifyRedirectUri } from '@/services/spotify';
-import { Bug } from 'lucide-react-native';
+import { useSpotifyAuthRequest, exchangeCodeForToken } from '@/services/spotify';
 
 export default function SettingsScreen() {
   const { settings, updateSettings, disconnectSpotify } = useApp();
@@ -96,15 +94,6 @@ export default function SettingsScreen() {
     updateSettings({ [key]: value });
     console.log(`[Settings] ${key} toggled to ${value}`);
   }, [updateSettings]);
-
-  const handleThresholdChange = useCallback((direction: 'up' | 'down') => {
-    const step = 5;
-    const current = settings.alertThreshold;
-    const newVal = direction === 'up'
-      ? Math.min(100, current + step)
-      : Math.max(30, current - step);
-    updateSettings({ alertThreshold: newVal });
-  }, [settings.alertThreshold, updateSettings]);
 
   const showAlert = useCallback((title: string, message: string) => {
     Alert.alert(title, message, [{ text: 'OK' }]);
@@ -179,42 +168,6 @@ export default function SettingsScreen() {
                   trackColor={{ false: Colors.surfaceBorder, true: Colors.accentDim }}
                   thumbColor={settings.autoDetect ? Colors.accent : Colors.textTertiary}
                 />
-              </View>
-
-              {Platform.OS === 'ios' && settings.autoDetect && (
-                <View style={styles.iosNotice}>
-                  <AlertTriangle size={14} color={Colors.warning} />
-                  <Text style={styles.iosNoticeText}>
-                    iOS limits continuous background monitoring. Clarity will analyze tracks when the app is opened and attempt periodic background refresh.
-                  </Text>
-                </View>
-              )}
-
-              <View style={styles.rowDivider} />
-
-              <View style={styles.row}>
-                <SlidersHorizontal size={20} color={Colors.warning} />
-                <View style={styles.rowContent}>
-                  <Text style={styles.rowLabel}>Alert Threshold</Text>
-                  <Text style={styles.rowHint}>Notify when score ≥ {settings.alertThreshold}%</Text>
-                </View>
-                <View style={styles.thresholdControls}>
-                  <TouchableOpacity
-                    style={styles.thresholdButton}
-                    onPress={() => handleThresholdChange('down')}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.thresholdButtonText}>−</Text>
-                  </TouchableOpacity>
-                  <Text style={styles.thresholdValue}>{settings.alertThreshold}%</Text>
-                  <TouchableOpacity
-                    style={styles.thresholdButton}
-                    onPress={() => handleThresholdChange('up')}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.thresholdButtonText}>+</Text>
-                  </TouchableOpacity>
-                </View>
               </View>
             </View>
           </View>
@@ -332,43 +285,6 @@ export default function SettingsScreen() {
                 <View style={styles.rowContent}>
                   <Text style={styles.rowLabel}>Version</Text>
                   <Text style={styles.rowValue}>1.0.0</Text>
-                </View>
-              </View>
-            </View>
-          </View>
-
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Debug Info</Text>
-            <View style={styles.card}>
-              <View style={styles.row}>
-                <Bug size={20} color={Colors.textTertiary} />
-                <View style={styles.rowContent}>
-                  <Text style={styles.rowLabel}>Redirect URI</Text>
-                  <Text style={styles.debugText} selectable>{spotifyRedirectUri}</Text>
-                </View>
-              </View>
-              <View style={styles.rowDivider} />
-              <View style={styles.row}>
-                <Bug size={20} color={Colors.textTertiary} />
-                <View style={styles.rowContent}>
-                  <Text style={styles.rowLabel}>Client ID</Text>
-                  <Text style={styles.debugText} selectable>{SPOTIFY_CLIENT_ID ? `${SPOTIFY_CLIENT_ID.slice(0, 8)}...` : 'Not set'}</Text>
-                </View>
-              </View>
-              <View style={styles.rowDivider} />
-              <View style={styles.row}>
-                <Bug size={20} color={Colors.textTertiary} />
-                <View style={styles.rowContent}>
-                  <Text style={styles.rowLabel}>Platform</Text>
-                  <Text style={styles.debugText}>{Platform.OS}</Text>
-                </View>
-              </View>
-              <View style={styles.rowDivider} />
-              <View style={styles.row}>
-                <Bug size={20} color={Colors.textTertiary} />
-                <View style={styles.rowContent}>
-                  <Text style={styles.rowLabel}>Auth Request Ready</Text>
-                  <Text style={styles.debugText}>{request ? 'Yes' : 'No'}</Text>
                 </View>
               </View>
             </View>

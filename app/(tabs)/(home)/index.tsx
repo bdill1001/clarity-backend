@@ -15,8 +15,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import {
-  ThumbsUp,
-  ThumbsDown,
+  User,
+  Bot,
   HelpCircle,
   Info,
   Radio,
@@ -24,6 +24,8 @@ import {
   Music,
   WifiOff,
   RefreshCw,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
@@ -49,6 +51,7 @@ export default function NowPlayingScreen() {
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const fadeIn = useRef(new Animated.Value(0)).current;
   const [isRefreshing, setIsRefreshing] = React.useState<boolean>(false);
+  const [showForensics, setShowForensics] = React.useState<boolean>(false);
 
   useEffect(() => {
     Animated.timing(fadeIn, {
@@ -257,25 +260,50 @@ export default function NowPlayingScreen() {
                   label={currentAnalysis.label}
                   size={190}
                   strokeWidth={10}
+                  showPercentage={false}
                 />
               </Animated.View>
 
-              {currentAnalysis.reasons.length > 0 && (
-                <View style={styles.reasonsSection}>
-                  <Text style={styles.sectionTitle}>Analysis Signals</Text>
-                  {currentAnalysis.reasons.map((reason, index) => (
-                    <View key={index} style={styles.reasonCard}>
-                      <View style={[styles.reasonDot, { backgroundColor: scoreColor }]} />
-                      <Text style={styles.reasonText}>{reason}</Text>
+              <View style={styles.forensicDisclosure}>
+                <TouchableOpacity
+                  style={styles.disclosureButton}
+                  onPress={() => setShowForensics(!showForensics)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.disclosureButtonText}>
+                    {showForensics ? 'Hide Forensic Details' : 'Show Forensic Details'}
+                  </Text>
+                  {showForensics ? <ChevronUp size={16} color={Colors.textSecondary} /> : <ChevronDown size={16} color={Colors.textSecondary} />}
+                </TouchableOpacity>
+
+                {showForensics && (
+                  <Animated.View style={styles.forensicContent}>
+                    <View style={styles.percentageRow}>
+                      <Text style={styles.percentageLabel}>Confidence Score</Text>
+                      <Text style={[styles.percentageValue, { color: scoreColor }]}>
+                        {currentAnalysis.aiLikelihood}%
+                      </Text>
                     </View>
-                  ))}
-                </View>
-              )}
+                    
+                    {currentAnalysis.reasons.length > 0 && (
+                      <View style={styles.reasonsSection}>
+                        <Text style={styles.forensicSectionTitle}>Forensic Signals</Text>
+                        {currentAnalysis.reasons.map((reason, index) => (
+                          <View key={index} style={styles.reasonCard}>
+                            <View style={[styles.reasonDot, { backgroundColor: scoreColor }]} />
+                            <Text style={styles.reasonText}>{reason}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+                  </Animated.View>
+                )}
+              </View>
             </>
           )}
 
           {currentAnalysis && <View style={styles.feedbackSection}>
-            <Text style={styles.sectionTitle}>Disagree with this?</Text>
+            <Text style={styles.sectionTitle}>What do you think?</Text>
             <View style={styles.feedbackRow}>
               <TouchableOpacity
                 style={[
@@ -286,7 +314,7 @@ export default function NowPlayingScreen() {
                 onPress={() => handleFeedback('HUMAN')}
                 activeOpacity={0.7}
               >
-                <ThumbsUp
+                <User
                   size={18}
                   color={existingFeedback?.userLabel === 'HUMAN' ? Colors.human : Colors.textSecondary}
                 />
@@ -309,7 +337,7 @@ export default function NowPlayingScreen() {
                 onPress={() => handleFeedback('AI')}
                 activeOpacity={0.7}
               >
-                <ThumbsDown
+                <Bot
                   size={18}
                   color={existingFeedback?.userLabel === 'AI' ? Colors.ai : Colors.textSecondary}
                 />
@@ -527,6 +555,59 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.textSecondary,
     lineHeight: 20,
+  },
+  forensicDisclosure: {
+    marginBottom: 24,
+  },
+  disclosureButton: {
+    flexDirection: 'row' as const,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.surfaceBorder,
+  },
+  disclosureButtonText: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: Colors.textSecondary,
+  },
+  forensicContent: {
+    marginTop: 12,
+    backgroundColor: Colors.surfaceLight,
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: Colors.surfaceBorder,
+  },
+  percentageRow: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.surfaceBorder,
+  },
+  percentageLabel: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    fontWeight: '500' as const,
+  },
+  percentageValue: {
+    fontSize: 24,
+    fontWeight: '700' as const,
+  },
+  forensicSectionTitle: {
+    fontSize: 11,
+    fontWeight: '700' as const,
+    color: Colors.textTertiary,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 1,
+    marginBottom: 10,
   },
   feedbackSection: {
     marginBottom: 24,

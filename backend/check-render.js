@@ -3,7 +3,7 @@ import fetch from 'node-fetch';
 async function run() {
   try {
     console.log('Testing live Render backend...');
-    const res = await fetch('http://localhost:3000/api/analyze', {
+    const res = await fetch('https://clarity-backend-bqzx.onrender.com/api/analyze', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

@@ -75,9 +75,30 @@ app.post('/api/analyze', async (req, res) => {
   }
 
   try {
-    console.log(`[Analyze] Manual analysis requested for: ${trackName} by ${artistName}`);
+    console.log(`[Analyze] Manual analysis requested for: ${trackName} by ${artistName} (ID: ${artistId})`);
     
-    // Fetch telemetry
+    // 1. Check Global Cache First
+    const { data: cached, error: cacheError } = await supabase
+      .from('global_analyses')
+      .select('*')
+      .eq('artist_id', artistId)
+      .maybeSingle();
+
+    if (cached && !cacheError) {
+      console.log(`[Analyze] Cache HIT for artist: ${artistName}. Skipping Gemini.`);
+      return res.json({
+        trackId: trackId,
+        aiLikelihood: cached.ai_likelihood,
+        label: cached.label,
+        reasons: cached.reasons,
+        reasonCodes: ['CACHED_RESULT'],
+        analyzedAt: cached.analyzed_at
+      });
+    }
+
+    console.log(`[Analyze] Cache MISS for artist: ${artistName}. Executing Forensic Engine...`);
+
+    // 2. Fetch telemetry
     const [artistData, totalReleases, relatedArtistCount, playlists] = await Promise.all([
       getArtistData(accessToken, artistId),
       getArtistAlbums(accessToken, artistId),
@@ -87,11 +108,26 @@ app.post('/api/analyze', async (req, res) => {
 
     const dossier = { trackName, artistName, artistData, relatedArtistCount, totalReleases, playlists };
 
-    // Run AI analysis (this will throw if it crashes internally)
+    // 3. Run AI analysis
     const analysis = await analyzeTrackWithAI(dossier);
     if (!analysis) throw new Error("Gemini returned null analysis object");
 
-    // Format like the frontend expects
+    // 4. Save to Global Cache
+    const { error: saveError } = await supabase
+      .from('global_analyses')
+      .upsert({
+        artist_id: artistId,
+        artist_name: artistName,
+        ai_likelihood: analysis.aiLikelihood,
+        label: analysis.label,
+        reasons: analysis.reasons,
+        is_recognized_artist: analysis.isRecognizedArtist || false,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'artist_id' });
+
+    if (saveError) console.error('[Analyze] Failed to save to cache:', saveError.message);
+
+    // 5. Respond
     const result = {
       trackId: trackId,
       aiLikelihood: analysis.aiLikelihood,
@@ -226,30 +262,32 @@ Analyze the provided dossier across the following pillars:
 
 1. Internal LLM Knowledge (PRIMARY PILLAR): Search your core training data. Do you recognize "${artistName}" as a real, established human musician? If the artist is highly famous (e.g., Post Malone, Kendrick Lamar, Taylor Swift) or a known indie act, classify as 'Likely Human' immediately.
 2. Release Velocity: Generative AI farms prioritize quantity over quality. If an obscure artist has a massive volume of releases (e.g., > 50) but 0 related artists and no playlist presence, this is highly indicative of an AI farm flooding the platform.
-3. Semantic Patterns: Does the artist name follow compound AI pseudonyms (e.g., "Luna Echo", "Static Wave")? Do the playlists mentioning them have names like "AI Music", "Suno", or "Udio"?
+3. Semantic Patterns: Does the artist name follow compound AI pseudonyms (e.g., "Luna Echo", "Static Wave")? Note: Trendy human names (e.g., "Aria Chen", "Kai Rivers") occupy a gray area. **CRITICAL:** A suspicious name pattern ALONE is not enough for 'Likely AI'; it MUST be corroborated by another forensic pillar.
 4. Multimodal Visual Assessment: Analyze the provided Profile Image URL. Are there classic AI generation artifacts (DALL-E/Midjourney plastic skin, asymmetrical features, garbled text)? Note: Using AI art does not guarantee the music is AI, but it is a strong data point.
-5. THE NUCLEAR INNOCENCE RULE: If you do not explicitly recognize this artist from your training data, YOU MUST DEFAULT to 'Uncertain' or 'Likely Human' to protect obscure human artists. The ONLY exceptions allowing a 'Likely AI' classification are: 
-A) The artist name explicitly contains AI markers (e.g., "Suno", "Udio", "AI Music").
-B) The Profile Image contains EGREGIOUS, undeniable AI-generation hallmarks (specifically: mangled/garbled text attempting to look like English, impossible anatomy, or highly generic synthetic artifacts). Stylized cartoon/vector art is common for humans—only override this failsafe if the AI artifacting is objective and overwhelming.
-C) High Release Velocity (See Rule 2): If the artist has a massive number of releases but zero footprint.
-D) Grounded Search Verification: (SEE RULE 6)
+5. THE NUCLEAR INNOCENCE RULE: If you do not explicitly recognize this artist from your training data, YOU MUST DEFAULT to 'Unsure' or 'Likely Human' to protect obscure human artists. The ONLY exceptions allowing a 'Likely AI' classification are if the "Forensic Corroboration Gate" is met (At least TWO of the following signals must be positive):
+   A) The artist name fits a synthetic/generated pattern (Rule 3).
+   B) The Profile Image contains EGREGIOUS, undeniable AI-generation hallmarks (Rule 4).
+   C) High Release Frequency (Rule 2): Specifically, a sustained density of >3 tracks per month recently (NOT just lifetime total).
+   D) Void of Existence (Rule 6): Absolutely zero social media or biographical data found via Search.
 6. GOOGLE SEARCH GROUNDING (THE ULTIMATE TIEBREAKER): You are equipped with Google Search. If an artist is unknown, YOU MUST search the web for their name. You are looking for TWO things:
-   - A human footprint: A real indie human will almost ALWAYS have an Instagram, Bandcamp, TikTok, or local gig listed. However, brand new humans might not have a strong Web Presence yet. If an artist has official streaming releases but ABSOLUTELY ZERO human social media footprint OR biographical data anywhere on the internet, they MIGHT be a mass-produced AI farm. **CRITICAL:** You can ONLY penalize an artist for a "Void of Existence" if their Release Velocity is suspiciously high (e.g., > 10 releases) OR if their Profile Image URL is assessed as AI-generated in Rule 4. If they have less than 10 releases, no footprint, AND a real human photo, you MUST default to "Uncertain" or "Likely Human" (Protecting brand new/local artists).
-   - Public Exposure: Search explicitly for Reddit threads or music forum posts discussing if "${artistName}" is AI. If the artist has been "outed" by the community as a synthetic farm, you MUST classify as 'Likely AI'.
-If EITHER the public exposure is confirmed, OR the "void of existence" is confirmed ALONGSIDE high Release Velocity AND/OR AI-generated Profile Art, you MAY OVERRIDE the Nuclear Innocence Rule and classify as 'Likely AI' (90%+).
+   - A human footprint: A real indie human will almost ALWAYS have an Instagram, Bandcamp, TikTok, or local gig listed. However, brand new humans might not have a strong Web Presence yet. If an artist has official streaming releases but ABSOLUTELY ZERO human social media footprint OR biographical data anywhere on the internet, they MIGHT be a mass-produced AI farm.
+   - Public Exposure: Search explicitly for Reddit threads or music forum posts discussing if "${artistName}" is AI. **GATE:** You require at least TWO independent sources or ONE highly authoritative source (e.g., music journalism) before using this as a decisive override.
 7. THE HYBRID IDENTITY RULE: Our goal is to detect synthetic *audio*. If Google Search reveals that an artist is a real, verified human, but they are explicitly using generative AI (Suno, Udio, Voice Clones) to create the *music or vocals* for this track, you MUST flag it as 'Likely AI'. A human identity does NOT protect synthetic audio.
+8. NETWORK VERIFICATION (RELATED ARTISTS): If related artists are found, check if their profiles are also "ghostly" (0 followers, AI art, no genres). If the related network looks like an automated "AI Cluster," ignore the related-artist signal as a human indicator.
 
 Gating Guardrails:
-- Nuclear Innocence Rule: If you do not explicitly recognize this artist from your training data, YOU MUST NOT guess 'Likely AI' unless you have definitive visual or community evidence. Default to 'Uncertain' (50%) or 'Likely Human' (10-30%). We would rather miss an AI artist than falsely accuse a real human. However, if the Profile Image URL is assessed as AI-generated in Rule 4, this protection is VOID.
-- Brand new human artists often have NO social media presence and 1-5 track releases. You MUST protect them with the Nuclear Innocence Rule unless they use clear AI-generated profile imagery.
-- Stylized names (DeadMau5) do not mean AI.
-- Formulate a 1-2 sentence compelling reason for your classification. This reason will be shown directly to the user in the app, so it MUST be written in a friendly, conversational, non-jargon style. (e.g., "While Tim is a real rocker, it looks like he used AI tools to bring this specific track to life!" or "This anonymous artist is flooding the platform with hundreds of releases, a common sign of AI generation."). Do NOT use sterile, robotic analytical jargon like 'telemetry', 'dossier', 'multimodal analysis', or 'nuclear innocence rule'. Speak to the music fan.
-Return ONLY a strict JSON object classifying this track, with no markdown formatting or backticks. It must contain EXACTLY these keys:
+- Nuclear Innocence Rule: If you do not explicitly recognize this artist, DEFAULT to 'Unsure' or 'Likely Human'. You would rather miss an AI artist than falsely accuse a real human. However, if EGREGIOUS AI visual artifacts are present, the gate is lowered.
+- Name Isolation: Do not guess 'Likely AI' solely because a name sounds trendy (e.g., "Lyla Vale").
+- Lifetime vs. Density: High lifetime releases over many years (DIY musicians) is NOT a penalty; focus on RECENT upload density.
+- Formulate a 1-2 sentence compelling reason. Speak to the music fan in a friendly style.
+Return ONLY a strict JSON object:
 {
-  "aiLikelihood": 0-100 (integer representing AI probability),
+  "aiLikelihood": 0-100 (integer),
   "isRecognizedArtist": true/false,
-  "label": "Likely Human" | "Uncertain" | "Likely AI",
+  "label": "Likely Human" | "Unsure" | "Likely AI",
   "reasons": ["1-2 sentences explaining reasoning"]
+}
+
 }`;
 
     const response = await ai.models.generateContent({

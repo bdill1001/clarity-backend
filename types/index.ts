@@ -36,12 +36,14 @@ export interface Track {
   distinctAlbumNames?: number;
   averageTrackPopularity?: number;
   hasLyrics?: boolean;
+  accessToken?: string;
+  artistId?: string;
 }
 
 export interface AnalysisResult {
   trackId: string;
   aiLikelihood: number;
-  label: 'Likely Human' | 'Uncertain' | 'Likely AI';
+  label: 'Likely Human' | 'Unsure' | 'Likely AI';
   reasonCodes: string[];
   reasons: string[];
   analyzedAt: string;
@@ -58,7 +60,7 @@ export interface UserFeedback {
   createdAt: string;
 }
 
-export type FilterType = 'all' | 'human' | 'uncertain' | 'ai';
+export type FilterType = 'all' | 'human' | 'unsure' | 'ai';
 
 export interface AppSettings {
   autoDetect: boolean;
@@ -70,7 +72,7 @@ export interface AppSettings {
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
-  autoDetect: false,
+  autoDetect: true,
   notificationSound: true,
   alertThreshold: 75,
   isOnboarded: false,

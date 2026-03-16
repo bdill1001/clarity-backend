@@ -30,12 +30,9 @@ export default React.memo(function TrackCard({ item, onPress }: TrackCardProps) 
       <View style={styles.info}>
         <Text style={styles.trackName} numberOfLines={1}>{track.name}</Text>
         <Text style={styles.artistName} numberOfLines={1}>{track.artist}</Text>
-      </View>
-      <View style={styles.scoreContainer}>
-        <Text style={[styles.score, { color }]}>{analysis.aiLikelihood}%</Text>
-        <View style={[styles.labelBadge, { backgroundColor: color + '18' }]}>
+        <View style={[styles.labelBadge, { backgroundColor: color + '18', alignSelf: 'flex-start' }]}>
           <Text style={[styles.labelText, { color }]}>
-            {analysis.label === 'Likely Human' ? 'Human' : analysis.label === 'Likely AI' ? 'AI' : '???'}
+            {analysis.label}
           </Text>
         </View>
       </View>

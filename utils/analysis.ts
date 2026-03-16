@@ -409,28 +409,52 @@ function buildAnalysisPrompt(track: Track): string {
 }
 
 export async function analyzeTrackWithAI(track: Track): Promise<AnalysisResult> {
-  console.log(`[Analysis] Starting AI analysis for "${track.name}" by ${track.artist}`);
-  console.log(`[Analysis] Track data: pop=${track.popularity}, followers=${track.artistFollowers}, genres=${JSON.stringify(track.artistGenres)}, label="${track.label}", albums=${track.artistAlbumCount} (verified=${track.albumCountVerified}), artistPop=${track.artistPopularity}, enrichmentComplete=${track.enrichmentComplete}, relatedArtists=${track.artistRelatedArtists}, hasRelated=${track.artistHasRelated}, topTrackPop=${track.artistTopTrackPopularity}, dataReliable=${track.dataReliable}, imageCount=${track.artistImageCount}`);
+  console.log(`[Analysis] Starting Tiered AI analysis for "${track.name}" by ${track.artist}`);
+  
+  // 1. Check Local Heuristic First (The "Free" Fast-Path)
+  // If the local heuristic is highly confident it's human, we can skip the backend call.
+  const localAnalysis = analyzeTrackFallback(track);
+  if (localAnalysis.label === 'Likely Human' && localAnalysis.aiLikelihood < 25) {
+    console.log(`[Analysis] Local heuristic is highly confident (Likely Human). Skipping Forensic Engine.`);
+    return localAnalysis;
+  }
 
-  const heuristics = computeHeuristicSignals(track);
-  console.log(`[Analysis] Heuristic signals: nameAiKeyword=${heuristics.nameAiKeywordScore}, nameAiCompound=${heuristics.nameAiCompoundScore}, labelAi=${heuristics.labelAiScore}, humanName=${heuristics.humanNameScore}, profileComplete=${heuristics.profileCompleteness}, ratio=${heuristics.releaseToFollowerRatio}, hasRelated=${heuristics.hasRelatedArtists}, topTrackPop=${heuristics.topTrackPopularity}, releaseFreq=${heuristics.releaseFrequency}, allSingles=${heuristics.allSingles}, hasImages=${heuristics.hasArtistImages}, imageCount=${heuristics.artistImageCount}, dataReliable=${heuristics.dataReliable}`);
+  console.log(`[Analysis] Local result is ${localAnalysis.label} (${localAnalysis.aiLikelihood}%). Escalating to Forensic Engine...`);
 
   try {
-    const prompt = buildAnalysisPrompt(track);
-    console.log(`[Analysis] Sending to Vercel Serverless AI for analysis...`);
-
-    // TODO: Implement actual fetch call to Vercel Serverless function here once deployed
-    // const response = await fetch('https://your-vercel-domain.vercel.app/api/analyze', { ... })
-    // const result = await response.json()
+    // 2. Call Backend Forensic Engine (Cached via Supabase)
+    // We use the same /api/analyze endpoint that our manual scanner uses.
+    const BACKEND_URL = 'http://localhost:3000'; // Replace with production URL when deployed
     
-    // For now, immediately fall back to local heuristic analysis
-    console.log('[Analysis] Vercel function not yet implemented. Falling back to local heuristic.');
-    return analyzeTrackFallback(track);
+    const response = await fetch(`${BACKEND_URL}/api/analyze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        trackId: track.id,
+        artistId: track.artistId,
+        trackName: track.name,
+        artistName: track.artist,
+        accessToken: track.accessToken // Passed from Spotify context
+      })
+    });
 
+    if (!response.ok) throw new Error(`Backend responded with ${response.status}`);
+
+    const result = await response.json();
+    console.log(`[Analysis] Forensic Engine result: ${result.label} (${result.aiLikelihood}%) - ${result.reasonCodes[0]}`);
+    
+    return {
+      trackId: track.id,
+      aiLikelihood: result.aiLikelihood,
+      label: result.label,
+      reasonCodes: result.reasonCodes,
+      reasons: result.reasons,
+      analyzedAt: result.analyzedAt,
+    };
 
   } catch (error) {
-    console.error('[Analysis] AI analysis failed, falling back to heuristic:', error);
-    return analyzeTrackFallback(track);
+    console.error('[Analysis] Forensic Engine escalation failed, falling back to local heuristic:', error);
+    return localAnalysis;
   }
 }
 
@@ -570,7 +594,7 @@ function analyzeTrackFallback(track: Track): AnalysisResult {
 
   const clamped = Math.max(1, Math.min(99, score));
   const label: AnalysisResult['label'] =
-    clamped >= 65 ? 'Likely AI' : clamped >= 35 ? 'Uncertain' : 'Likely Human';
+    clamped >= 65 ? 'Likely AI' : clamped >= 35 ? 'Unsure' : 'Likely Human';
 
   console.log(`[Analysis] Fallback result: score=${clamped}, label="${label}"`);
 
@@ -588,7 +612,7 @@ export function getLabelColor(label: AnalysisResult['label']): string {
   switch (label) {
     case 'Likely Human':
       return '#00D4AA';
-    case 'Uncertain':
+    case 'Unsure':
       return '#FFB347';
     case 'Likely AI':
       return '#FF6B6B';
