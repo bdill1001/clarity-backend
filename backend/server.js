@@ -268,7 +268,11 @@ app.post('/api/registry/submit', async (req, res) => {
        trackData = await trackRes.json();
     } else if (type === 'artist') {
        const topRes = await fetch(`https://api.spotify.com/v1/artists/${id}/top-tracks?market=US`, { headers: { Authorization: `Bearer ${accessToken}` }});
-       if (!topRes.ok) return res.status(400).json({ error: 'Failed to fetch artist tracks' });
+       if (!topRes.ok) {
+           const errText = await topRes.text();
+           console.error('[Registry Submit] Spotify API Error:', errText);
+           return res.status(400).json({ error: `Failed to fetch artist tracks: ${topRes.status} ${errText}` });
+       }
        const topData = await topRes.json();
        if (!topData.tracks || topData.tracks.length === 0) return res.status(400).json({ error: 'Artist has no playable tracks' });
        trackData = topData.tracks[0];

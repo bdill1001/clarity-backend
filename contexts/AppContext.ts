@@ -56,6 +56,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
   });
 
   const feedbackRef = useRef<UserFeedback[]>([]);
+  const historyRef = useRef<AnalyzedTrack[]>([]);
 
   useEffect(() => {
     if (settingsQuery.data) {
@@ -68,6 +69,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
   useEffect(() => {
     if (historyQuery.data) {
       setHistory(historyQuery.data);
+      historyRef.current = historyQuery.data;
     }
   }, [historyQuery.data]);
 
@@ -94,7 +96,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     currentTrackRef.current = currentTrack;
   }, [currentTrack]);
 
-  const saveSettingsMutation = useMutation({
+  const { mutate: saveSettings } = useMutation({
     mutationFn: async (newSettings: AppSettings) => {
       await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(newSettings));
       return newSettings;
@@ -104,7 +106,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     },
   });
 
-  const saveHistoryMutation = useMutation({
+  const { mutate: saveHistory } = useMutation({
     mutationFn: async (newHistory: AnalyzedTrack[]) => {
       const trimmed = newHistory.slice(0, 50);
       await AsyncStorage.setItem(HISTORY_KEY, JSON.stringify(trimmed));
@@ -112,7 +114,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     },
   });
 
-  const saveFeedbackMutation = useMutation({
+  const { mutate: saveFeedback } = useMutation({
     mutationFn: async (newFeedback: UserFeedback[]) => {
       await AsyncStorage.setItem(FEEDBACK_KEY, JSON.stringify(newFeedback));
       return newFeedback;
@@ -122,19 +124,20 @@ export const [AppProvider, useApp] = createContextHook(() => {
   const updateSettings = useCallback((partial: Partial<AppSettings>) => {
     setSettings((prev) => {
       const updated = { ...prev, ...partial };
-      saveSettingsMutation.mutate(updated);
+      saveSettings(updated);
       return updated;
     });
-  }, []);
+  }, [saveSettings]);
 
   const addToHistory = useCallback((entry: AnalyzedTrack) => {
     setHistory((prev) => {
       const filtered = prev.filter((h) => h.track.id !== entry.track.id);
       const updated = [entry, ...filtered].slice(0, 50);
-      saveHistoryMutation.mutate(updated);
+      saveHistory(updated);
+      historyRef.current = updated;
       return updated;
     });
-  }, [saveHistoryMutation]);
+  }, [saveHistory]);
 
   const submitFeedback = useCallback(async (track: Track, userLabel: UserFeedback['userLabel']) => {
     const entry: UserFeedback = {
@@ -146,7 +149,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     // Optimistic UI update
     setFeedback((prev) => {
       const updated = [entry, ...prev.filter((f) => f.trackId !== track.id)];
-      saveFeedbackMutation.mutate(updated);
+      saveFeedback(updated);
       feedbackRef.current = updated;
       return updated;
     });
@@ -173,7 +176,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     } catch(err) {
        console.error('[Feedback] Failed to sync vote to registry:', err);
     }
-  }, [saveFeedbackMutation, deviceId]);
+  }, [saveFeedback, deviceId]);
 
   const getFeedbackForTrack = useCallback((trackId: string): UserFeedback | undefined => {
     return feedback.find((f) => f.trackId === trackId);
@@ -265,7 +268,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
           console.log('[App] Auto-Poll detected new track:', result.track.name);
           
           // SPEED OPTIMIZATION: Check history FIRST before escalating to backend
-          const previousAnalysis = history.find(h => h.track.id === result.track?.id);
+          const previousAnalysis = historyRef.current.find(h => h.track.id === result.track?.id);
           
           lastTrackIdRef.current = result.track.id;
           setCurrentTrack(result.track);
@@ -298,7 +301,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     } catch (e) {
       console.warn('[App] Silent poll error bypassed:', e);
     }
-  }, [settings.spotifyConnected, settings.isOnboarded, history, enrichAndAnalyze]);
+  }, [settings.spotifyConnected, settings.isOnboarded, enrichAndAnalyze]);
 
   const refreshNowPlaying = useCallback(async () => {
     console.log('[App] Manual refresh triggered');
@@ -330,7 +333,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
         setCurrentTrack(result.track);
         
         // Check history before re-analyzing
-        const previousAnalysis = history.find(h => h.track.id === result.track?.id);
+        const previousAnalysis = historyRef.current.find(h => h.track.id === result.track?.id);
         if (previousAnalysis) {
           setCurrentAnalysis(previousAnalysis.analysis);
         } else {
