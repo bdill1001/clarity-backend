@@ -269,13 +269,27 @@ app.post('/api/registry/submit', async (req, res) => {
     } else if (type === 'artist') {
        const topRes = await fetch(`https://api.spotify.com/v1/artists/${id}/top-tracks?market=US`, { headers: { Authorization: `Bearer ${accessToken}` }});
        if (!topRes.ok) {
-           const errText = await topRes.text();
-           console.error('[Registry Submit] Spotify API Error:', errText);
-           return res.status(400).json({ error: `Failed to fetch artist tracks: ${topRes.status} ${errText}` });
+           if (topRes.status === 403 || topRes.status === 404) {
+               console.log(`[Registry Submit] Caught ${topRes.status} for artist ${id}. Generating mock track...`);
+               const artistRes = await fetch(`https://api.spotify.com/v1/artists/${id}`, { headers: { Authorization: `Bearer ${accessToken}` }});
+               if (!artistRes.ok) return res.status(400).json({ error: `Spotify blocked access to this artist completely (Status ${artistRes.status})` });
+               const artistData = await artistRes.json();
+               
+               trackData = {
+                  id: `shadowbanned_${id}`,
+                  name: "[Tracks Unavailable - Region Locked or Removed]",
+                  artists: [{ id: id, name: artistData.name }]
+               };
+           } else {
+               const errText = await topRes.text();
+               console.error('[Registry Submit] Spotify API Error:', errText);
+               return res.status(400).json({ error: `Failed to fetch artist tracks: ${topRes.status} ${errText}` });
+           }
+       } else {
+           const topData = await topRes.json();
+           if (!topData.tracks || topData.tracks.length === 0) return res.status(400).json({ error: 'Artist has no playable tracks' });
+           trackData = topData.tracks[0];
        }
-       const topData = await topRes.json();
-       if (!topData.tracks || topData.tracks.length === 0) return res.status(400).json({ error: 'Artist has no playable tracks' });
-       trackData = topData.tracks[0];
     }
     
     res.json({
