@@ -278,18 +278,15 @@ app.post('/api/registry/submit', async (req, res) => {
                    const artistData = await artistRes.json();
                    artistName = artistData.name || artistName;
                } else {
-                   console.warn(`[Registry Submit] Could not fetch artist name via API. Status: ${artistRes.status}. Attempting HTML scrape bypass...`);
+                   console.warn(`[Registry Submit] Could not fetch artist name via API. Status: ${artistRes.status}. Attempting oEmbed bypass...`);
                    try {
-                       const webpageRes = await fetch(`https://open.spotify.com/artist/${id}`);
+                       const webpageRes = await fetch(`https://open.spotify.com/oembed?url=spotify:artist:${id}`);
                        if (webpageRes.ok) {
-                           const html = await webpageRes.text();
-                           const titleMatch = html.match(/<title>(.*?)<\/title>/i);
-                           if (titleMatch && titleMatch[1]) {
-                               artistName = titleMatch[1].split('|')[0].trim();
-                           }
+                           const oEmbedData = await webpageRes.json();
+                           if (oEmbedData.title) artistName = oEmbedData.title;
                        }
                    } catch (scrapeErr) {
-                       console.warn('[Registry Submit] Web scrape failed:', scrapeErr.message);
+                       console.warn('[Registry Submit] oEmbed scrape failed:', scrapeErr.message);
                    }
                }
                
