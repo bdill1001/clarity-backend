@@ -269,16 +269,22 @@ app.post('/api/registry/submit', async (req, res) => {
     } else if (type === 'artist') {
        const topRes = await fetch(`https://api.spotify.com/v1/artists/${id}/top-tracks?market=US`, { headers: { Authorization: `Bearer ${accessToken}` }});
        if (!topRes.ok) {
-           if (topRes.status === 403 || topRes.status === 404) {
+           if (topRes.status === 403 || topRes.status === 404 || topRes.status === 429) {
                console.log(`[Registry Submit] Caught ${topRes.status} for artist ${id}. Generating mock track...`);
                const artistRes = await fetch(`https://api.spotify.com/v1/artists/${id}`, { headers: { Authorization: `Bearer ${accessToken}` }});
-               if (!artistRes.ok) return res.status(400).json({ error: `Spotify blocked access to this artist completely (Status ${artistRes.status})` });
-               const artistData = await artistRes.json();
+               
+               let artistName = `Unknown Artist (${id})`;
+               if (artistRes.ok) {
+                   const artistData = await artistRes.json();
+                   artistName = artistData.name || artistName;
+               } else {
+                   console.warn(`[Registry Submit] Could not fetch artist name either. Status: ${artistRes.status}`);
+               }
                
                trackData = {
                   id: `shadowbanned_${id}`,
                   name: "[Tracks Unavailable - Region Locked or Removed]",
-                  artists: [{ id: id, name: artistData.name }]
+                  artists: [{ id: id, name: artistName }]
                };
            } else {
                const errText = await topRes.text();
