@@ -13,7 +13,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ShieldAlert, Search, GlobeGlobus, ExternalLink, Bot, User, CheckCircle2 } from 'lucide-react-native';
+import { Database, Search, Globe, ExternalLink, Bot, User, CheckCircle2 } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { getStoredTokens } from '@/services/spotify';
 import { useFocusEffect } from 'expo-router';
@@ -40,29 +40,29 @@ export default function RegistryScreen() {
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [scanError, setScanError] = useState<string | null>(null);
 
-  const [wallOfShame, setWallOfShame] = useState<RegistryArtist[]>([]);
-  const [isLoadingWall, setIsLoadingWall] = useState(true);
+  const [aiDirectory, setAiDirectory] = useState<RegistryArtist[]>([]);
+  const [isLoadingDirectory, setIsLoadingDirectory] = useState(true);
 
-  const fetchWallOfShame = useCallback(async () => {
-    setIsLoadingWall(true);
+  const fetchDirectory = useCallback(async () => {
+    setIsLoadingDirectory(true);
     try {
       const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL;
       const res = await fetch(`${backendUrl}/api/registry/list`);
       if (res.ok) {
         const data = await res.json();
-        setWallOfShame(data);
+        setAiDirectory(data);
       }
     } catch (err) {
-      console.error('[Registry] Failed to fetch Wall of Shame:', err);
+      console.error('[Registry] Failed to fetch Verified Directory:', err);
     } finally {
-      setIsLoadingWall(false);
+      setIsLoadingDirectory(false);
     }
   }, []);
 
   useFocusEffect(
     useCallback(() => {
-      fetchWallOfShame();
-    }, [fetchWallOfShame])
+      fetchDirectory();
+    }, [fetchDirectory])
   );
 
   const handleScan = async () => {
@@ -123,8 +123,8 @@ export default function RegistryScreen() {
          label: analysisData.label,
       });
 
-      // Refresh the wall of shame in case this new scan triggered a confirmation!
-      fetchWallOfShame();
+      // Refresh the directory in case this new scan triggered a confirmation!
+      fetchDirectory();
 
     } catch (err: any) {
       console.error('[Registry] Scan Error:', err);
@@ -135,7 +135,7 @@ export default function RegistryScreen() {
     }
   };
 
-  const renderWallItem = ({ item, index }: { item: RegistryArtist; index: number }) => (
+  const renderDirectoryItem = ({ item, index }: { item: RegistryArtist; index: number }) => (
     <View style={styles.wallItem}>
       <View style={styles.wallItemRank}>
         <Text style={styles.wallItemRankText}>#{index + 1}</Text>
@@ -144,7 +144,7 @@ export default function RegistryScreen() {
         <Text style={styles.wallItemName} numberOfLines={1}>{item.artist_name}</Text>
         <Text style={styles.wallItemScore}>Trust Score: {item.trust_score} (Verified AI)</Text>
       </View>
-      <Bot size={20} color={Colors.danger} />
+      <Bot size={20} color={Colors.accent} />
     </View>
   );
 
@@ -155,20 +155,20 @@ export default function RegistryScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <View style={styles.header}>
-          <ShieldAlert size={20} color={Colors.accent} />
+          <Database size={20} color={Colors.accent} />
           <Text style={styles.headerTitle}>Global Registry</Text>
         </View>
 
         <FlatList
           style={styles.list}
           contentContainerStyle={styles.listContent}
-          data={wallOfShame}
+          data={aiDirectory}
           keyExtractor={(item) => item.artist_id}
-          renderItem={renderWallItem}
+          renderItem={renderDirectoryItem}
           refreshControl={
             <RefreshControl
-              refreshing={isLoadingWall}
-              onRefresh={fetchWallOfShame}
+              refreshing={isLoadingDirectory}
+              onRefresh={fetchDirectory}
               tintColor={Colors.accent}
               colors={[Colors.accent]}
             />
@@ -221,12 +221,12 @@ export default function RegistryScreen() {
                     <Text style={styles.resultArtistName}>{scanResult.artistName}</Text>
                     <Text style={styles.resultTrackName}>"{scanResult.trackName}"</Text>
                     <View style={styles.resultLabelRow}>
-                      {scanResult.label === 'Likely AI' && <Bot size={16} color={Colors.danger} style={{marginRight: 6}}/>}
-                      {scanResult.label === 'Likely Human' && <User size={16} color={Colors.success} style={{marginRight: 6}}/>}
+                      {scanResult.label === 'Likely AI' && <Bot size={16} color={Colors.accent} style={{marginRight: 6}}/>}
+                      {scanResult.label === 'Likely Human' && <User size={16} color={Colors.human} style={{marginRight: 6}}/>}
                       <Text style={[
                         styles.resultLabel,
-                        scanResult.label === 'Likely AI' ? {color: Colors.danger} :
-                        scanResult.label === 'Likely Human' ? {color: Colors.success} : null
+                        scanResult.label === 'Likely AI' ? {color: Colors.accent} :
+                        scanResult.label === 'Likely Human' ? {color: Colors.human} : null
                       ]}>{scanResult.label}</Text>
                     </View>
                   </View>
@@ -235,18 +235,18 @@ export default function RegistryScreen() {
 
               {/* Leaderboard Header */}
               <View style={styles.boardHeader}>
-                <Text style={styles.boardTitle}>Wall of Shame</Text>
-                <Text style={styles.boardSub}>Synthetic artists permanently blacklisted by community consensus and AI verification.</Text>
+                <Text style={styles.boardTitle}>Verified AI Directory</Text>
+                <Text style={styles.boardSub}>Artists verified as utilizing AI generation through community consensus and AI analysis.</Text>
               </View>
             </>
           }
           ListEmptyComponent={
             <View style={styles.emptyBoard}>
-              {!isLoadingWall && (
+              {!isLoadingDirectory && (
                 <>
                   <CheckCircle2 size={48} color={Colors.surfaceBorder} style={{ marginBottom: 16 }} />
-                  <Text style={styles.emptyBoardTitle}>Registry is Clean</Text>
-                  <Text style={styles.emptyBoardSub}>No artists have reached the confirmation threshold yet. Start scanning!</Text>
+                  <Text style={styles.emptyBoardTitle}>Directory is Empty</Text>
+                  <Text style={styles.emptyBoardSub}>No artists have been verified yet. Check back later or start scanning!</Text>
                 </>
               )}
             </View>
@@ -367,8 +367,8 @@ const styles = StyleSheet.create({
     borderColor: Colors.surfaceBorder,
   },
   resultBoxDanger: {
-    backgroundColor: 'rgba(255, 69, 58, 0.05)',
-    borderColor: 'rgba(255, 69, 58, 0.3)',
+    backgroundColor: 'rgba(216, 180, 254, 0.05)',
+    borderColor: 'rgba(216, 180, 254, 0.3)',
   },
   resultBoxSafe: {
     backgroundColor: 'rgba(48, 209, 88, 0.05)',
@@ -444,7 +444,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   wallItemScore: {
-    color: Colors.danger,
+    color: Colors.accent,
     fontSize: 13,
     fontWeight: '500',
   },

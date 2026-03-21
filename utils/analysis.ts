@@ -612,12 +612,12 @@ export function getLabelColor(label: AnalysisResult['label']): string {
     case 'Unsure':
       return '#FFB347';
     case 'Likely AI':
-      return '#FF6B6B';
+      return '#A855F7'; // Neutral Purple
   }
 }
 
 export function getScoreColor(score: number): string {
   if (score < 35) return '#00D4AA';
   if (score < 65) return '#FFB347';
-  return '#FF6B6B';
+  return '#A855F7'; // Neutral Purple
 }

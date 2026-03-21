@@ -26,7 +26,7 @@ const Colors = {
 
   human: '#00D4AA',
   uncertain: '#FFB347',
-  ai: '#FF6B6B',
+  ai: '#A855F7', // Neutral Purple
 
   spotifyGreen: '#1DB954',
   spotifyBlack: '#191414',
