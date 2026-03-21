@@ -36,6 +36,36 @@ const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET || '';
 // Health check
 app.get('/', (req, res) => res.send('Clarity Backend Worker is running.'));
 
+// --- Registry Helpers ---
+async function updateRegistryFromAnalysis(artistId, artistName, aiLikelihood) {
+  let points = 0;
+  if (aiLikelihood > 85) points = 10;
+  else if (aiLikelihood < 15) points = -10;
+  
+  if (points !== 0) {
+    const { data: existing } = await supabase.from('artist_registry').select('*').eq('artist_id', artistId).maybeSingle();
+    let trustScore = existing ? existing.trust_score : 0;
+    
+    // Only apply the 10-point AI swing ONCE per artist to avoid infinite scaling
+    if (!existing || existing.ai_analysis_score === null) {
+       trustScore += points;
+       let status = 'pending';
+       if (trustScore >= 10) status = 'confirmed_ai';
+       if (trustScore <= -5) status = 'confirmed_human';
+       // We leave disputed logic to the voting route since AI only sets this once
+       
+       await supabase.from('artist_registry').upsert({
+         artist_id: artistId,
+         artist_name: artistName,
+         ai_analysis_score: points,
+         trust_score: trustScore,
+         status: status
+       }, { onConflict: 'artist_id' });
+       console.log(`[Registry] Auto-applied ${points} points for ${artistName} from Gemini analysis.`);
+    }
+  }
+}
+
 // Register / Update User Endpoint
 // The React Native app calls this after Spotify OAuth completes
 app.post('/api/register', async (req, res) => {
@@ -77,6 +107,38 @@ app.post('/api/analyze', async (req, res) => {
   try {
     console.log(`[Analyze] Manual analysis requested for: ${trackName} by ${artistName} (ID: ${artistId})`);
     
+    // 0.5 Check Community Registry First
+    const { data: registryItem } = await supabase
+      .from('artist_registry')
+      .select('*')
+      .eq('artist_id', artistId)
+      .maybeSingle();
+
+    if (registryItem) {
+      if (registryItem.status === 'confirmed_ai') {
+        console.log(`[Analyze] Registry HIT (AI) for: ${artistName}`);
+        return res.json({
+          trackId: trackId,
+          aiLikelihood: 98,
+          label: 'Likely AI',
+          reasons: ['Crowd-Sourced Consensus: Confirmed AI via Clarity Registry'],
+          reasonCodes: ['COMMUNITY_VERIFIED'],
+          analyzedAt: new Date().toISOString()
+        });
+      }
+      if (registryItem.status === 'confirmed_human') {
+        console.log(`[Analyze] Registry HIT (Human) for: ${artistName}`);
+        return res.json({
+          trackId: trackId,
+          aiLikelihood: 2,
+          label: 'Likely Human',
+          reasons: ['Crowd-Sourced Consensus: Confirmed Human via Clarity Registry'],
+          reasonCodes: ['COMMUNITY_VERIFIED'],
+          analyzedAt: new Date().toISOString()
+        });
+      }
+    }
+
     // 1. Check Global Cache First
     const { data: cached, error: cacheError } = await supabase
       .from('global_analyses')
@@ -126,6 +188,9 @@ app.post('/api/analyze', async (req, res) => {
       }, { onConflict: 'artist_id' });
 
     if (saveError) console.error('[Analyze] Failed to save to cache:', saveError.message);
+    
+    // 4.5 Auto-update Registry with heavy AI weight
+    await updateRegistryFromAnalysis(artistId, artistName, analysis.aiLikelihood);
 
     // 5. Respond
     const result = {
@@ -140,6 +205,98 @@ app.post('/api/analyze', async (req, res) => {
     res.json(result);
   } catch (err) {
     console.error('[Analyze] Error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- Registry Endpoints ---
+
+app.post('/api/registry/vote', async (req, res) => {
+  const { userId, artistId, artistName, trackId, vote } = req.body;
+  if (!userId || !artistId || !trackId || !vote) return res.status(400).json({ error: 'Missing fields' });
+  
+  try {
+     const { error: voteErr } = await supabase.from('user_votes').insert({ user_id: userId, artist_id: artistId, track_id: trackId, vote });
+     if (voteErr) {
+        if (voteErr.code === '23505') return res.status(400).json({ error: 'User already voted for this artist' });
+        throw voteErr;
+     }
+     
+     let points = vote === 'AI' ? 1 : (vote === 'HUMAN' ? -2 : 0);
+     if (points === 0) return res.json({ success: true });
+     
+     const { data: existing } = await supabase.from('artist_registry').select('*').eq('artist_id', artistId).maybeSingle();
+     let trustScore = (existing ? existing.trust_score : 0) + points;
+     let aiScore = existing ? existing.ai_analysis_score : null;
+     let status = existing ? existing.status : 'pending';
+     
+     // Deep Analysis Protocol (Disputes)
+     if (aiScore === -10 && trustScore >= 0) status = 'disputed';
+     else if (aiScore === 10 && trustScore <= 0) status = 'disputed';
+     else if (trustScore >= 10 && status !== 'disputed') status = 'confirmed_ai';
+     else if (trustScore <= -5 && status !== 'disputed') status = 'confirmed_human';
+     
+     await supabase.from('artist_registry').upsert({
+       artist_id: artistId,
+       artist_name: artistName,
+       trust_score: trustScore,
+       status: status,
+       updated_at: new Date().toISOString()
+     }, { onConflict: 'artist_id' });
+     
+     res.json({ success: true, newStatus: status, newScore: trustScore });
+  } catch (err) {
+     console.error('[Registry Vote] Error:', err.message);
+     res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/registry/submit', async (req, res) => {
+  const { url, accessToken } = req.body;
+  if (!url || !accessToken) return res.status(400).json({ error: 'Missing fields' });
+  
+  try {
+    const match = url.match(/spotify\.com\/(track|artist)\/([a-zA-Z0-9]+)/);
+    if (!match) return res.status(400).json({ error: 'Invalid Spotify URL' });
+    const type = match[1];
+    const id = match[2];
+    
+    let trackData;
+    if (type === 'track') {
+       const trackRes = await fetch(`https://api.spotify.com/v1/tracks/${id}`, { headers: { Authorization: `Bearer ${accessToken}` }});
+       if (!trackRes.ok) return res.status(400).json({ error: 'Failed to fetch track' });
+       trackData = await trackRes.json();
+    } else if (type === 'artist') {
+       const topRes = await fetch(`https://api.spotify.com/v1/artists/${id}/top-tracks?market=US`, { headers: { Authorization: `Bearer ${accessToken}` }});
+       if (!topRes.ok) return res.status(400).json({ error: 'Failed to fetch artist tracks' });
+       const topData = await topRes.json();
+       if (!topData.tracks || topData.tracks.length === 0) return res.status(400).json({ error: 'Artist has no playable tracks' });
+       trackData = topData.tracks[0];
+    }
+    
+    res.json({
+       trackId: trackData.id,
+       artistId: trackData.artists[0].id,
+       trackName: trackData.name,
+       artistName: trackData.artists[0].name
+    });
+  } catch (err) {
+    console.error('[Registry Submit] Error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/registry/list', async (req, res) => {
+  try {
+    const { data: artists, error } = await supabase
+      .from('artist_registry')
+      .select('artist_id, artist_name, trust_score')
+      .eq('status', 'confirmed_ai')
+      .order('trust_score', { ascending: false });
+      
+    if (error) throw error;
+    res.json(artists);
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
@@ -319,8 +476,17 @@ Return ONLY a strict JSON object:
 
 // --- Background Polling Worker ---
 
+let isWorkerRunning = false;
+
 async function pollUsers() {
-  console.log(`[Worker] Starting polling cycle at ${new Date().toISOString()}...`);
+  if (isWorkerRunning) {
+    console.log(`[Worker] Previous polling cycle still running. Skipping this tick.`);
+    return;
+  }
+  isWorkerRunning = true;
+  
+  try {
+    console.log(`[Worker] Starting polling cycle at ${new Date().toISOString()}...`);
 
   // 1. Fetch active users
   const { data: users, error } = await supabase
@@ -417,16 +583,68 @@ async function pollUsers() {
         playlists
       };
 
-      console.log(`[Worker] Interrogating Gemini for "${trackName}"...`);
-      // 4. Analyze Track
-      const analysis = await analyzeTrackWithAI(dossier);
+      // 3.5 Check Community Registry first
+      let analysis = null;
+      if (artistId) {
+        const { data: registryItem } = await supabase.from('artist_registry').select('*').eq('artist_id', artistId).maybeSingle();
+        if (registryItem) {
+          if (registryItem.status === 'confirmed_ai') {
+            console.log(`[Worker] Registry HIT (AI) for: ${artistName}. Skipping Gemini.`);
+            analysis = { aiLikelihood: 98, label: 'Likely AI', reasons: ['Crowd-Sourced Consensus: Confirmed AI via Clarity Registry'], isRecognizedArtist: false };
+          } else if (registryItem.status === 'confirmed_human') {
+            console.log(`[Worker] Registry HIT (Human) for: ${artistName}. Skipping Gemini.`);
+            analysis = { aiLikelihood: 2, label: 'Likely Human', reasons: ['Crowd-Sourced Consensus: Confirmed Human via Clarity Registry'], isRecognizedArtist: true };
+          }
+        }
+      }
+
+      // 3.6 Check Global Cache first (if not in Registry)
+      if (!analysis && artistId) {
+        const { data: cached } = await supabase
+          .from('global_analyses')
+          .select('*')
+          .eq('artist_id', artistId)
+          .maybeSingle();
+          
+        if (cached) {
+          console.log(`[Worker] Cache HIT for artist: ${artistName}. Skipping Gemini.`);
+          analysis = {
+            aiLikelihood: cached.ai_likelihood,
+            label: cached.label,
+            reasons: cached.reasons,
+            isRecognizedArtist: cached.is_recognized_artist
+          };
+        }
+      }
+
+      if (!analysis) {
+        console.log(`[Worker] Interrogating Gemini for "${trackName}"...`);
+        // 4. Analyze Track
+        analysis = await analyzeTrackWithAI(dossier);
+        
+        // Save to Global Cache
+        if (analysis && artistId) {
+          await supabase.from('global_analyses').upsert({
+            artist_id: artistId,
+            artist_name: artistName,
+            ai_likelihood: analysis.aiLikelihood,
+            label: analysis.label,
+            reasons: analysis.reasons,
+            is_recognized_artist: analysis.isRecognizedArtist || false,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'artist_id' });
+          
+          await updateRegistryFromAnalysis(artistId, artistName, analysis.aiLikelihood);
+        }
+      }
 
       // Update DB to mark track as analyzed
       await supabase.from('users').update({ last_analyzed_track_id: trackId }).eq('id', user.id);
 
-      // 4. Send Notification if highly suspicious
+      // 5. Send Notification if highly suspicious
       if (analysis && analysis.aiLikelihood >= 65 && user.expo_push_token) {
-        const cacheKey = `${user.id}_${trackId}`;
+        // Use expo_push_token in cache key to prevent duplicates if user has multiple DB rows
+        const cacheKey = `${user.expo_push_token}_${trackId}`;
         if (!notifiedTracksCache.has(cacheKey)) {
           console.log(`[Worker] AI Track Detected for ${user.id}! Sending Push Notification.`);
           notifiedTracksCache.add(cacheKey);
@@ -453,6 +671,10 @@ async function pollUsers() {
     } catch (userErr) {
       console.error(`[Worker] Error processing user ${user.id}:`, userErr.message);
     }
+  }
+  
+  } finally {
+    isWorkerRunning = false;
   }
 }
 

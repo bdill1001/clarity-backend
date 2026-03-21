@@ -3,6 +3,7 @@ import { View, StyleSheet, Animated, Text } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import Colors from '@/constants/colors';
 import { getScoreColor } from '@/utils/analysis';
+import { User, Bot, HelpCircle, ShieldCheck } from 'lucide-react-native';
 
 interface ScoreRingProps {
   score: number;
@@ -10,6 +11,7 @@ interface ScoreRingProps {
   strokeWidth?: number;
   label: string;
   showPercentage?: boolean;
+  reasonCodes?: string[];
 }
 
 export default function ScoreRing({ 
@@ -17,13 +19,15 @@ export default function ScoreRing({
   size = 200, 
   strokeWidth = 12, 
   label,
-  showPercentage = true
+  showPercentage = true,
+  reasonCodes = []
 }: ScoreRingProps) {
   const animatedValue = useRef(new Animated.Value(0)).current;
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
   const center = size / 2;
   const color = getScoreColor(score);
+  const isCommunityVerified = reasonCodes.some(code => code.includes('COMMUNITY_VERIFIED'));
 
   useEffect(() => {
     Animated.timing(animatedValue, {
@@ -62,8 +66,18 @@ export default function ScoreRing({
         />
       </Svg>
       <View style={styles.center}>
-        {showPercentage && <Text style={[styles.scoreText, { color }]}>{score}%</Text>}
-        <Text style={[styles.labelText, { color, marginTop: showPercentage ? 2 : 0 }]}>{label}</Text>
+        <View style={styles.iconContainer}>
+          {isCommunityVerified ? (
+            <ShieldCheck size={48} color={color} />
+          ) : (
+            <>
+              {label === 'Likely Human' && <User size={48} color={color} />}
+              {label === 'Likely AI' && <Bot size={48} color={color} />}
+              {label === 'Unsure' && <HelpCircle size={48} color={color} />}
+            </>
+          )}
+        </View>
+        <Text style={[styles.labelText, { color, marginTop: 8 }]}>{label}</Text>
       </View>
       <View style={[styles.glow, { backgroundColor: color, opacity: 0.06 }]} />
     </View>
@@ -89,11 +103,15 @@ const styles = StyleSheet.create({
     letterSpacing: -1,
   },
   labelText: {
-    fontSize: 13,
-    fontWeight: '600' as const,
+    fontSize: 16,
+    fontWeight: '700' as const,
     textTransform: 'uppercase' as const,
     letterSpacing: 1.5,
-    marginTop: 2,
+    marginTop: 8,
+  },
+  iconContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   glow: {
     position: 'absolute' as const,

@@ -52,6 +52,7 @@ export interface AnalysisResult {
 export interface AnalyzedTrack {
   track: Track;
   analysis: AnalysisResult;
+  timestamp?: number;
 }
 
 export interface UserFeedback {

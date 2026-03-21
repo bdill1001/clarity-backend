@@ -585,10 +585,7 @@ function analyzeTrackFallback(track: Track): AnalysisResult {
   }
 
   if (!track.enrichmentComplete) {
-    if (heuristics.nameAiKeywordScore === 0 && heuristics.nameAiCompoundScore === 0 && heuristics.labelAiScore === 0) {
-      score = Math.min(score, 45);
-    }
-    reasons.push('Artist data could not be fully loaded — results may be less accurate');
+    reasons.push('Note: Missing some Spotify profile data for this artist');
     codes.push('ENRICHMENT_FAILED');
   }
 

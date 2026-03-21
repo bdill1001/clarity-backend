@@ -25,7 +25,9 @@ export const [AppProvider, useApp] = createContextHook(() => {
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
   const [spotifyError, setSpotifyError] = useState<string | null>(null);
   const [sessionExpired, setSessionExpired] = useState<boolean>(false);
+  const [deviceId, setDeviceId] = useState<string>('anonymous');
   const lastTrackIdRef = useRef<string | null>(null);
+  const currentTrackRef = useRef<Track | null>(null);
 
   const settingsLoadedRef = useRef<boolean>(false);
 
@@ -53,6 +55,8 @@ export const [AppProvider, useApp] = createContextHook(() => {
     },
   });
 
+  const feedbackRef = useRef<UserFeedback[]>([]);
+
   useEffect(() => {
     if (settingsQuery.data) {
       setSettings(settingsQuery.data);
@@ -70,8 +74,25 @@ export const [AppProvider, useApp] = createContextHook(() => {
   useEffect(() => {
     if (feedbackQuery.data) {
       setFeedback(feedbackQuery.data);
+      feedbackRef.current = feedbackQuery.data;
     }
   }, [feedbackQuery.data]);
+
+  useEffect(() => {
+    async function loadDeviceId() {
+      let id = await AsyncStorage.getItem('clarity_device_id');
+      if (!id) {
+        id = 'device_' + Math.random().toString(36).substring(2) + Date.now().toString(36);
+        await AsyncStorage.setItem('clarity_device_id', id);
+      }
+      setDeviceId(id);
+    }
+    loadDeviceId();
+  }, []);
+
+  useEffect(() => {
+    currentTrackRef.current = currentTrack;
+  }, [currentTrack]);
 
   const saveSettingsMutation = useMutation({
     mutationFn: async (newSettings: AppSettings) => {
@@ -108,27 +129,51 @@ export const [AppProvider, useApp] = createContextHook(() => {
 
   const addToHistory = useCallback((entry: AnalyzedTrack) => {
     setHistory((prev) => {
-      const exists = prev.some((h) => h.track.id === entry.track.id);
-      if (exists) return prev;
-      const updated = [entry, ...prev].slice(0, 50);
+      const filtered = prev.filter((h) => h.track.id !== entry.track.id);
+      const updated = [entry, ...filtered].slice(0, 50);
       saveHistoryMutation.mutate(updated);
       return updated;
     });
-  }, []);
+  }, [saveHistoryMutation]);
 
-  const submitFeedback = useCallback((trackId: string, userLabel: UserFeedback['userLabel']) => {
+  const submitFeedback = useCallback(async (track: Track, userLabel: UserFeedback['userLabel']) => {
     const entry: UserFeedback = {
-      trackId,
+      trackId: track.id,
       userLabel,
       createdAt: new Date().toISOString(),
     };
+    
+    // Optimistic UI update
     setFeedback((prev) => {
-      const updated = [entry, ...prev.filter((f) => f.trackId !== trackId)];
+      const updated = [entry, ...prev.filter((f) => f.trackId !== track.id)];
       saveFeedbackMutation.mutate(updated);
+      feedbackRef.current = updated;
       return updated;
     });
-    console.log(`[Feedback] Track ${trackId}: ${userLabel}`);
-  }, []);
+    
+    console.log(`[Feedback] Local save for Track ${track.id}: ${userLabel}`);
+    
+    // Background API Sync to Postgres Registry
+    try {
+       const url = process.env.EXPO_PUBLIC_BACKEND_URL;
+       if (url && track.artistIds && track.artistIds.length > 0) {
+         await fetch(`${url}/api/registry/vote`, {
+           method: 'POST',
+           headers: { 'Content-Type': 'application/json' },
+           body: JSON.stringify({
+              userId: deviceId, // Anonymous deduplication ID
+              artistId: track.artistIds[0],
+              artistName: track.artist,
+              trackId: track.id,
+              vote: userLabel
+           })
+         });
+         console.log(`[Feedback] Successfully synced vote to Global Registry.`);
+       }
+    } catch(err) {
+       console.error('[Feedback] Failed to sync vote to registry:', err);
+    }
+  }, [saveFeedbackMutation, deviceId]);
 
   const getFeedbackForTrack = useCallback((trackId: string): UserFeedback | undefined => {
     return feedback.find((f) => f.trackId === trackId);
@@ -382,9 +427,23 @@ export const [AppProvider, useApp] = createContextHook(() => {
       if (data && data.trackId && data.analysis) {
         // If the push matches the current UI track, hydrate immediately!
         if (lastTrackIdRef.current === data.trackId) {
-          console.log('[App] Hydrating UI with push payload scores!');
-          setCurrentAnalysis(data.analysis as AnalysisResult);
-          setIsAnalyzing(false);
+          const hasVoted = feedbackRef.current.some(f => f.trackId === data.trackId);
+          if (hasVoted) {
+            console.log('[App] Ignoring push payload because user already voted on this track!');
+          } else {
+            console.log('[App] Hydrating UI with push payload scores!');
+            setCurrentAnalysis(data.analysis as AnalysisResult);
+            setIsAnalyzing(false);
+            
+            // Sync history tab with the updated push payload to fix "Vollgaswerk" divergence bug
+            if (currentTrackRef.current && currentTrackRef.current.id === data.trackId) {
+              addToHistory({ 
+                track: currentTrackRef.current, 
+                analysis: data.analysis as AnalysisResult, 
+                timestamp: Date.now() 
+              });
+            }
+          }
         }
       }
     });

@@ -1,4 +1,12 @@
+# EAS Ignore - Ensures google-services.json is uploaded even though git ignores it
+node_modules/
+.expo/
+dist/
+web-build/
+ios/
+android/
+backend/
 .agent/
 .agents/
-backend/
 *.log
+.git/

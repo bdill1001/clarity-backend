@@ -77,7 +77,7 @@ export default function NowPlayingScreen() {
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
-    submitFeedback(currentTrack.id, label);
+    submitFeedback(currentTrack, label);
 
     Animated.sequence([
       Animated.timing(pulseAnim, { toValue: 0.95, duration: 100, useNativeDriver: true }),
@@ -261,6 +261,7 @@ export default function NowPlayingScreen() {
                   size={190}
                   strokeWidth={10}
                   showPercentage={false}
+                  reasonCodes={currentAnalysis.reasonCodes}
                 />
               </Animated.View>
 
@@ -271,7 +272,7 @@ export default function NowPlayingScreen() {
                   activeOpacity={0.7}
                 >
                   <Text style={styles.disclosureButtonText}>
-                    {showForensics ? 'Hide Forensic Details' : 'Show Forensic Details'}
+                    {showForensics ? 'Hide Details' : 'Show Details'}
                   </Text>
                   {showForensics ? <ChevronUp size={16} color={Colors.textSecondary} /> : <ChevronDown size={16} color={Colors.textSecondary} />}
                 </TouchableOpacity>
@@ -281,7 +282,9 @@ export default function NowPlayingScreen() {
                     <View style={styles.percentageRow}>
                       <Text style={styles.percentageLabel}>Confidence Score</Text>
                       <Text style={[styles.percentageValue, { color: scoreColor }]}>
-                        {currentAnalysis.aiLikelihood}%
+                        {currentAnalysis.label === 'Likely Human' 
+                          ? 100 - currentAnalysis.aiLikelihood 
+                          : currentAnalysis.aiLikelihood}%
                       </Text>
                     </View>
                     
