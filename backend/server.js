@@ -46,7 +46,12 @@ async function updateRegistryFromAnalysis(artistId, artistName, aiLikelihood, ar
     const { data: existing } = await supabase.from('artist_registry').select('*').eq('artist_id', artistId).maybeSingle();
     let trustScore = existing ? existing.trust_score : 0;
     
-    const needsScoreUpdate = (!existing || existing.ai_analysis_score === null) && points !== 0;
+    // OVERRIDE LOGIC: 
+    // If the new analysis is highly confident AI (points=10) AND the artist isn't already confirmed_ai,
+    // we ALWAYS want to update. This fixes cases where an artist was stuck in 'pending' or 'confirmed_human'.
+    const isNewAiFlag = points === 10 && (!existing || existing.status !== 'confirmed_ai');
+    
+    const needsScoreUpdate = isNewAiFlag || ((!existing || existing.ai_analysis_score === null) && points !== 0);
     const needsImageUpdate = artistImage && (!existing || !existing.artist_image);
     
     if (needsScoreUpdate || needsImageUpdate) {
@@ -54,7 +59,12 @@ async function updateRegistryFromAnalysis(artistId, artistName, aiLikelihood, ar
        let storedAiScore = existing ? existing.ai_analysis_score : null;
        
        if (needsScoreUpdate) {
-           trustScore += points;
+           // If it's a new AI flag overriding a human/pending hole, reset trustScore to 10
+           if (isNewAiFlag && trustScore < 10) {
+              trustScore = 10;
+           } else {
+              trustScore += points;
+           }
            storedAiScore = points;
            if (trustScore >= 10) status = 'confirmed_ai';
            if (trustScore <= -5) status = 'confirmed_human';
@@ -65,14 +75,17 @@ async function updateRegistryFromAnalysis(artistId, artistName, aiLikelihood, ar
          artist_name: artistName,
          ai_analysis_score: storedAiScore,
          trust_score: trustScore,
-         status: status
+         status: status,
+         updated_at: new Date().toISOString()
        };
        if (artistImage) {
          payload.artist_image = artistImage;
        }
        
        await supabase.from('artist_registry').upsert(payload, { onConflict: 'artist_id' });
-       console.log(`[Registry] Auto-applied updates for ${artistName} (Score Updated: ${needsScoreUpdate}, Image Added: ${needsImageUpdate}).`);
+       console.log(`[Registry] ${isNewAiFlag ? 'OVERRIDE' : 'Auto-update'} applied for ${artistName} (Status: ${status}, Score: ${trustScore}).`);
+    } else {
+       console.log(`[Registry] Skipping update for ${artistName} (Already in sync).`);
     }
   }
 }
@@ -750,10 +763,12 @@ async function pollUsers() {
 
       // 5. Send Notification if highly suspicious
       if (analysis && analysis.aiLikelihood >= 65 && user.expo_push_token) {
-        // Use expo_push_token in cache key to prevent duplicates if user has multiple DB rows
-        const cacheKey = `${user.expo_push_token}_${trackId}`;
+        // PER-USER SUPPRESSION: Use user.id + trackId in cache key.
+        // This ensures every unique user account receives a notification for an AI track,
+        // even if they share a physical device (expo_push_token) with another tester.
+        const cacheKey = `${user.id}_${trackId}`;
         if (!notifiedTracksCache.has(cacheKey)) {
-          console.log(`[Worker] AI Track Detected for ${user.id}! Sending Push Notification.`);
+          console.log(`[Worker] AI Track Detected for User ${user.id} (${user.spotify_id})! Sending Push Notification.`);
           notifiedTracksCache.add(cacheKey);
 
           await fetch('https://exp.host/--/api/v2/push/send', {

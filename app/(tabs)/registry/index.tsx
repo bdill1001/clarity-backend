@@ -99,41 +99,31 @@ export default function RegistryScreen() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url, accessToken: tokens.accessToken })
       });
-      
-      const sessionData = await submitRes.json();
-      if (!submitRes.ok) throw new Error(sessionData.error || 'Failed to parse URL.');
-      
-      // We explicitly inform the user that it's being analyzed
-      setScanResult({
-        ...sessionData,
-        label: 'Analyzing with Sentinel AI...',
+      const response = await fetch(`${backendUrl}/api/analyze`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          trackId: 'manual_' + Date.now(),
+          artistId: 'manual_art_' + Date.now(), // Will be resolved by backend
+          trackName: 'Manual URL Scan',
+          artistName: 'Analyzing...',
+          accessToken: tokens.accessToken,
+          url: url
+        })
       });
 
-      // 2. Trigger standard assessment
-      const analyzeRes = await fetch(`${backendUrl}/api/analyze`, {
-         method: 'POST',
-         headers: { 'Content-Type': 'application/json' },
-         body: JSON.stringify({
-           trackId: sessionData.trackId,
-           artistId: sessionData.artistId,
-           trackName: sessionData.trackName,
-           artistName: sessionData.artistName,
-           accessToken: tokens.accessToken
-         })
-      });
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || 'Failed to analyze URL');
+      }
 
-      const analysisData = await analyzeRes.json();
-      if (!analyzeRes.ok) throw new Error(analysisData.error);
-      
-      setScanResult({
-         ...sessionData,
-         aiLikelihood: analysisData.aiLikelihood,
-         label: analysisData.label,
-      });
+      const result = await response.json();
+      setScanResult(result);
 
-      // Refresh the directory in case this new scan triggered a confirmation!
-      fetchDirectory();
-
+      // If it's AI, refresh the directory list automatically to show the new addition
+      if (result.label === 'Likely AI') {
+        setTimeout(fetchDirectory, 1500); // Small delay to let Supabase propagate
+      }
     } catch (err: any) {
       console.error('[Registry] Scan Error:', err);
       setScanError(err.message || 'An error occurred during scanning.');
