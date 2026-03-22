@@ -290,7 +290,13 @@ async function spotifyFetch(url: string, token: string, maxRetries: number = 2):
       if (response.status === 429) {
         const retryAfter = response.headers.get('Retry-After');
         const waitMs = retryAfter ? parseInt(retryAfter, 10) * 1000 : (attempt + 1) * 1500;
-        console.warn(`[Spotify] Rate limited (429) on ${url}, waiting ${waitMs}ms before retry ${attempt + 1}/${maxRetries}`);
+        console.warn(`[Spotify] Rate limited (429) on ${url}, asked to wait ${waitMs}ms before retry ${attempt + 1}/${maxRetries}`);
+        
+        if (waitMs > 10000) {
+           console.warn(`[Spotify] Rate limit ban is too long (${waitMs}ms) - aborting fetch.`);
+           return null;
+        }
+        
         await delay(waitMs);
         continue;
       }
@@ -375,7 +381,13 @@ async function tryCurrentlyPlaying(token: string): Promise<{ track: Track | null
       if (response.status === 429) {
         const retryAfter = response.headers.get('Retry-After');
         const waitMs = retryAfter ? parseInt(retryAfter, 10) * 1000 : 2000;
-        console.warn(`[Spotify] currently-playing rate limited, waiting ${waitMs}ms`);
+        console.warn(`[Spotify] currently-playing rate limited, asked to wait ${waitMs}ms`);
+        
+        if (waitMs > 10000) {
+           console.warn(`[Spotify] Rate limit ban is too long (${waitMs}ms) - aborting fetch.`);
+           return { track: null, status: 'error' };
+        }
+        
         await delay(waitMs);
         continue;
       }

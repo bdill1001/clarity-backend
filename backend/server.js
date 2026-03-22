@@ -37,31 +37,42 @@ const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET || '';
 app.get('/', (req, res) => res.send('Clarity Backend Worker is running.'));
 
 // --- Registry Helpers ---
-async function updateRegistryFromAnalysis(artistId, artistName, aiLikelihood) {
+async function updateRegistryFromAnalysis(artistId, artistName, aiLikelihood, artistImage = null) {
   let points = 0;
   if (aiLikelihood > 85) points = 10;
   else if (aiLikelihood < 15) points = -10;
   
-  if (points !== 0) {
+  if (points !== 0 || artistImage) {
     const { data: existing } = await supabase.from('artist_registry').select('*').eq('artist_id', artistId).maybeSingle();
     let trustScore = existing ? existing.trust_score : 0;
     
-    // Only apply the 10-point AI swing ONCE per artist to avoid infinite scaling
-    if (!existing || existing.ai_analysis_score === null) {
-       trustScore += points;
-       let status = 'pending';
-       if (trustScore >= 10) status = 'confirmed_ai';
-       if (trustScore <= -5) status = 'confirmed_human';
-       // We leave disputed logic to the voting route since AI only sets this once
+    const needsScoreUpdate = (!existing || existing.ai_analysis_score === null) && points !== 0;
+    const needsImageUpdate = artistImage && (!existing || !existing.artist_image);
+    
+    if (needsScoreUpdate || needsImageUpdate) {
+       let status = existing ? existing.status : 'pending';
+       let storedAiScore = existing ? existing.ai_analysis_score : null;
        
-       await supabase.from('artist_registry').upsert({
+       if (needsScoreUpdate) {
+           trustScore += points;
+           storedAiScore = points;
+           if (trustScore >= 10) status = 'confirmed_ai';
+           if (trustScore <= -5) status = 'confirmed_human';
+       }
+       
+       const payload = {
          artist_id: artistId,
          artist_name: artistName,
-         ai_analysis_score: points,
+         ai_analysis_score: storedAiScore,
          trust_score: trustScore,
          status: status
-       }, { onConflict: 'artist_id' });
-       console.log(`[Registry] Auto-applied ${points} points for ${artistName} from Gemini analysis.`);
+       };
+       if (artistImage) {
+         payload.artist_image = artistImage;
+       }
+       
+       await supabase.from('artist_registry').upsert(payload, { onConflict: 'artist_id' });
+       console.log(`[Registry] Auto-applied updates for ${artistName} (Score Updated: ${needsScoreUpdate}, Image Added: ${needsImageUpdate}).`);
     }
   }
 }
@@ -190,7 +201,8 @@ app.post('/api/analyze', async (req, res) => {
     if (saveError) console.error('[Analyze] Failed to save to cache:', saveError.message);
     
     // 4.5 Auto-update Registry with heavy AI weight
-    await updateRegistryFromAnalysis(artistId, artistName, analysis.aiLikelihood);
+    const artistImage = artistData?.images?.[0]?.url || null;
+    await updateRegistryFromAnalysis(artistId, artistName, analysis.aiLikelihood, artistImage);
 
     // 5. Respond
     const result = {
@@ -323,7 +335,7 @@ app.get('/api/registry/list', async (req, res) => {
   try {
     const { data: artists, error } = await supabase
       .from('artist_registry')
-      .select('artist_id, artist_name, trust_score')
+      .select('artist_id, artist_name, trust_score, artist_image')
       .eq('status', 'confirmed_ai')
       .order('trust_score', { ascending: false });
       
