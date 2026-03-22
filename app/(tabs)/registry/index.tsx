@@ -230,7 +230,11 @@ export default function RegistryScreen() {
                     scanResult.label === 'Likely Human' ? styles.resultBoxSafe : null
                   ]}>
                     <Text style={styles.resultArtistName}>{scanResult.artistName}</Text>
-                    <Text style={styles.resultTrackName}>"{scanResult.trackName}"</Text>
+                    {scanResult.trackName === "[Tracks Unavailable - Region Locked or Removed]" ? (
+                      <Text style={[styles.resultTrackName, { fontStyle: 'italic', opacity: 0.7 }]}>Artist Profile Scan</Text>
+                    ) : (
+                      <Text style={styles.resultTrackName}>"{scanResult.trackName}"</Text>
+                    )}
                     <View style={styles.resultLabelRow}>
                       {scanResult.label === 'Likely AI' && <Bot size={16} color={Colors.ai} style={{marginRight: 6}}/>}
                       {scanResult.label === 'Likely Human' && <User size={16} color={Colors.human} style={{marginRight: 6}}/>}
