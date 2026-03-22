@@ -290,7 +290,7 @@ export default function NowPlayingScreen() {
                     
                     {currentAnalysis.reasons.length > 0 && (
                       <View style={styles.reasonsSection}>
-                        <Text style={styles.forensicSectionTitle}>Forensic Signals</Text>
+                        <Text style={styles.forensicSectionTitle}>Analysis Signals</Text>
                         {currentAnalysis.reasons.map((reason, index) => (
                           <View key={index} style={styles.reasonCard}>
                             <View style={[styles.reasonDot, { backgroundColor: scoreColor }]} />

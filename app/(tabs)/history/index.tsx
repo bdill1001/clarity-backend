@@ -115,7 +115,7 @@ export default function HistoryScreen() {
         <View style={styles.modalOverlay}>
           <SafeAreaView style={styles.modalContainer}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Forensic Profile</Text>
+              <Text style={styles.modalTitle}>Analysis Profile</Text>
               <TouchableOpacity
                 onPress={() => setSelectedTrack(null)}
                 style={styles.closeButton}
@@ -146,7 +146,7 @@ export default function HistoryScreen() {
                 
                 {selectedTrack.analysis.reasons.length > 0 && (
                   <View style={styles.reasonsSection}>
-                    <Text style={styles.forensicSectionTitle}>Forensic Signals</Text>
+                    <Text style={styles.forensicSectionTitle}>Analysis Signals</Text>
                     {selectedTrack.analysis.reasons.map((reason, index) => (
                       <View key={index} style={styles.reasonCard}>
                         <View style={[styles.reasonDot, { backgroundColor: getLabelColor(selectedTrack.analysis.label) }]} />

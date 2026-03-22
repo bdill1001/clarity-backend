@@ -189,7 +189,7 @@ export default function RegistryScreen() {
               {/* Scanner Section */}
               <View style={styles.scannerCard}>
                 <Text style={styles.scannerTitle}>Manual Scan</Text>
-                <Text style={styles.scannerSub}>Paste a Spotify link to run an immediate forensic analysis.</Text>
+                <Text style={styles.scannerSub}>Paste a Spotify link to run an immediate deep scan.</Text>
                 
                 <View style={styles.inputRow}>
                   <View style={styles.inputContainer}>

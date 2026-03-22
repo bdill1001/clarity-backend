@@ -131,8 +131,21 @@ export const [AppProvider, useApp] = createContextHook(() => {
 
   const addToHistory = useCallback((entry: AnalyzedTrack) => {
     setHistory((prev) => {
+      // Trim bloated Spotify API properties down to just the essential UI fields to prevent AsyncStorage crash
+      const cleanTrack = {
+        id: entry.track.id,
+        name: entry.track.name,
+        artist: entry.track.artist,
+        artistIds: entry.track.artistIds,
+        album: entry.track.album,
+        albumArt: entry.track.albumArt,
+        durationMs: entry.track.durationMs
+      } as Track;
+      
+      const cleanEntry = { track: cleanTrack, analysis: entry.analysis, timestamp: entry.timestamp || Date.now() };
+
       const filtered = prev.filter((h) => h.track.id !== entry.track.id);
-      const updated = [entry, ...filtered].slice(0, 50);
+      const updated = [cleanEntry, ...filtered].slice(0, 30); // 30 is safer for Android limits
       saveHistory(updated);
       historyRef.current = updated;
       return updated;
@@ -423,29 +436,25 @@ export const [AppProvider, useApp] = createContextHook(() => {
       }
     });
 
-    // Sub to push notification UI payloads
     const notifSub = Notifications.addNotificationReceivedListener(notification => {
       console.log('[App] Notification received payload:', notification.request.content.data);
       const data = notification.request.content.data;
-      if (data && data.trackId && data.analysis) {
-        // If the push matches the current UI track, hydrate immediately!
+      
+      if (data && data.trackId && data.analysis && data.track) {
+        // ALWAYS log AI track discoveries to History, even if the user already skipped the song
+        addToHistory({ 
+          track: data.track as Track, 
+          analysis: data.analysis as AnalysisResult, 
+          timestamp: Date.now() 
+        });
+
+        // Hydrate the visual ring ONLY if the pushed song is STILL actively playing
         if (lastTrackIdRef.current === data.trackId) {
           const hasVoted = feedbackRef.current.some(f => f.trackId === data.trackId);
-          if (hasVoted) {
-            console.log('[App] Ignoring push payload because user already voted on this track!');
-          } else {
+          if (!hasVoted) {
             console.log('[App] Hydrating UI with push payload scores!');
             setCurrentAnalysis(data.analysis as AnalysisResult);
             setIsAnalyzing(false);
-            
-            // Sync history tab with the updated push payload to fix "Vollgaswerk" divergence bug
-            if (currentTrackRef.current && currentTrackRef.current.id === data.trackId) {
-              addToHistory({ 
-                track: currentTrackRef.current, 
-                analysis: data.analysis as AnalysisResult, 
-                timestamp: Date.now() 
-              });
-            }
           }
         }
       }

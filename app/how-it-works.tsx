@@ -12,7 +12,7 @@ export default function HowItWorksScreen() {
     <View style={styles.root}>
       <SafeAreaView style={styles.safe} edges={['top']}>
         <View style={styles.header}>
-          <Text style={styles.title}>Forensic Engine</Text>
+          <Text style={styles.title}>Deep Analysis Engine</Text>
           <TouchableOpacity
             onPress={() => router.back()}
             style={styles.closeButton}
@@ -32,7 +32,7 @@ export default function HowItWorksScreen() {
               <Text style={styles.sectionTitle}>The Multi-Layered Engine</Text>
             </View>
             <Text style={styles.text}>
-              Clarity does not "listen" to audio. Instead, it acts as a forensic scanner, analyzing the digital footprint of artists and tracks to distinguish between human creativity and synthetic generation.
+              Clarity does not "listen" to audio. Instead, it acts as a digital presence scanner, analyzing the digital footprint of artists and tracks to distinguish between human creativity and synthetic generation.
             </Text>
           </View>
 
@@ -42,7 +42,7 @@ export default function HowItWorksScreen() {
               <Text style={styles.sectionTitle}>Verification Pillars</Text>
             </View>
             <Text style={styles.text}>
-              Our engine cross-references dozens of signals across 4 key forensic pillars to reach a high-confidence assessment:
+              Our engine cross-references dozens of signals across 4 key analysis pillars to reach a high-confidence assessment:
             </Text>
             <View style={styles.signalList}>
               <SignalItem 
@@ -73,13 +73,13 @@ export default function HowItWorksScreen() {
               Clarity is designed to protect human artists first. If an artist's digital footprint is small but potentially human, the engine defaults to 'Unsure' or 'Human' rather than 'Likely AI'.
             </Text>
             <Text style={[styles.text, { marginTop: 8 }]}>
-              A 'Likely AI' result requires multiple independent forensic corroborations to clear our high-confidence gate.
+              A 'Likely AI' result requires multiple independent analysis corroborations to clear our high-confidence gate.
             </Text>
           </View>
 
           <View style={styles.disclaimerBox}>
             <Text style={styles.disclaimerText}>
-              Forensic tools provide likelihood based on patterns, not definitive proof. False positives can occur, especially with new independent human artists.
+              Analysis tools provide likelihood based on patterns, not definitive proof. False positives can occur, especially with new independent human artists.
             </Text>
           </View>
         </ScrollView>
