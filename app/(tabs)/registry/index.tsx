@@ -12,6 +12,7 @@ import {
   RefreshControl,
   ScrollView,
   Image,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Database, Search, Globe, ExternalLink, Bot, User, CheckCircle2 } from 'lucide-react-native';
@@ -41,6 +42,9 @@ export default function RegistryScreen() {
   const [isScanning, setIsScanning] = useState(false);
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [scanError, setScanError] = useState<string | null>(null);
+  
+  const [isFlagging, setIsFlagging] = useState(false);
+  const [flagged, setFlagged] = useState(false);
 
   const [aiDirectory, setAiDirectory] = useState<RegistryArtist[]>([]);
   const [isLoadingDirectory, setIsLoadingDirectory] = useState(true);
@@ -76,6 +80,8 @@ export default function RegistryScreen() {
     setIsScanning(true);
     setScanResult(null);
     setScanError(null);
+    setIsFlagging(false);
+    setFlagged(false);
 
     try {
       const tokens = await getStoredTokens();
@@ -134,6 +140,32 @@ export default function RegistryScreen() {
     } finally {
       setIsScanning(false);
       setUrl('');
+    }
+  };
+
+  const handleFlag = async () => {
+    if (!scanResult) return;
+    setIsFlagging(true);
+    try {
+      const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL;
+      const res = await fetch(`${backendUrl}/api/registry/flag`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          artistId: scanResult.artistId,
+          artistName: scanResult.artistName,
+          trackId: scanResult.trackId
+        })
+      });
+      if (!res.ok) throw new Error("Failed to submit flag");
+      
+      setFlagged(true);
+      Alert.alert("Submitted", "This artist has been flagged for manual verification by a Clarity Admin.");
+    } catch (err: any) {
+      console.error('[Registry] Flag Error:', err);
+      Alert.alert("Error", err.message || "Could not submit flag. Please try again.");
+    } finally {
+      setIsFlagging(false);
     }
   };
 
@@ -244,6 +276,24 @@ export default function RegistryScreen() {
                         scanResult.label === 'Likely Human' ? {color: Colors.human} : null
                       ]}>{scanResult.label}</Text>
                     </View>
+
+                    {scanResult.label !== 'Analyzing with Sentinel AI...' && (
+                      <TouchableOpacity 
+                        style={[styles.flagButton, (isFlagging || flagged || scanResult.label === 'Likely AI') && styles.flagButtonDisabled]}
+                        disabled={isFlagging || flagged || scanResult.label === 'Likely AI'}
+                        onPress={handleFlag}
+                      >
+                        {isFlagging ? (
+                          <ActivityIndicator size="small" color="#FFF" />
+                        ) : (
+                          <Text style={styles.flagButtonText}>
+                            {flagged ? "Flagged for Admin Verification" : 
+                             scanResult.label === 'Likely AI' ? "Verified AI (Added to Registry)" : 
+                             "Flag for Admin Verification"}
+                          </Text>
+                        )}
+                      </TouchableOpacity>
+                    )}
                   </View>
                 )}
               </View>
@@ -483,5 +533,23 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 4,
     textAlign: 'center',
+  },
+  flagButton: {
+    marginTop: 16,
+    backgroundColor: '#333',
+    height: 44,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#444',
+  },
+  flagButtonDisabled: {
+    opacity: 0.5,
+  },
+  flagButtonText: {
+    color: '#E0E0E0',
+    fontSize: 14,
+    fontWeight: '600',
   }
 });

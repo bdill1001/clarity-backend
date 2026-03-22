@@ -266,6 +266,30 @@ app.post('/api/registry/vote', async (req, res) => {
   }
 });
 
+app.post('/api/registry/flag', async (req, res) => {
+  const { artistId, artistName, trackId } = req.body;
+  if (!artistId || !artistName || !trackId) return res.status(400).json({ error: 'Missing fields' });
+  
+  try {
+     const { data: existing } = await supabase.from('artist_registry').select('*').eq('artist_id', artistId).maybeSingle();
+     
+     // Only escalate to admin dispute if not already confirmed
+     if (!existing || existing.status !== 'confirmed_ai') {
+       await supabase.from('artist_registry').upsert({
+         artist_id: artistId,
+         artist_name: artistName,
+         status: 'disputed',
+         updated_at: new Date().toISOString()
+       }, { onConflict: 'artist_id' });
+     }
+     
+     res.json({ success: true, newStatus: existing?.status === 'confirmed_ai' ? 'confirmed_ai' : 'disputed' });
+  } catch (err) {
+     console.error('[Registry Flag] Error:', err.message);
+     res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/registry/submit', async (req, res) => {
   const { url, accessToken } = req.body;
   if (!url || !accessToken) return res.status(400).json({ error: 'Missing fields' });
