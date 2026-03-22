@@ -84,6 +84,9 @@ export default function RegistryScreen() {
     setFlagged(false);
 
     try {
+      const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL;
+      
+      // 1. Resolve URL to Metadata first
       const tokens = await getStoredTokens();
       if (!tokens) {
         setScanError('Please connect your Spotify account in Settings first.');
@@ -91,24 +94,31 @@ export default function RegistryScreen() {
         return;
       }
 
-      const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL;
-      
-      // 1. Submit to Registry to parse URL and fetch Track Data
       const submitRes = await fetch(`${backendUrl}/api/registry/submit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url, accessToken: tokens.accessToken })
       });
+      
+      const sessionData = await submitRes.json();
+      if (!submitRes.ok) throw new Error(sessionData.error || 'Failed to parse URL.');
+      
+      // Set initial result with "Analyzing..." label
+      setScanResult({
+        ...sessionData,
+        label: 'Analyzing with Sentinel AI...',
+      });
+
+      // 2. Trigger standard assessment
       const response = await fetch(`${backendUrl}/api/analyze`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          trackId: 'manual_' + Date.now(),
-          artistId: 'manual_art_' + Date.now(), // Will be resolved by backend
-          trackName: 'Manual URL Scan',
-          artistName: 'Analyzing...',
-          accessToken: tokens.accessToken,
-          url: url
+          trackId: sessionData.trackId,
+          artistId: sessionData.artistId,
+          trackName: sessionData.trackName,
+          artistName: sessionData.artistName,
+          accessToken: tokens.accessToken
         })
       });
 
@@ -118,7 +128,12 @@ export default function RegistryScreen() {
       }
 
       const result = await response.json();
-      setScanResult(result);
+      
+      // Merge results to keep the names from step 1
+      setScanResult({
+        ...sessionData,
+        ...result
+      });
 
       // If it's AI, refresh the directory list automatically to show the new addition
       if (result.label === 'Likely AI') {
