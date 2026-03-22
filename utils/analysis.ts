@@ -413,9 +413,16 @@ export async function analyzeTrackWithAI(track: Track): Promise<AnalysisResult> 
   
   // 1. Check Local Heuristic First (The "Free" Fast-Path)
   // If the local heuristic is highly confident it's human, we can skip the backend call.
+  // CRITICAL: We NEVER bypass the backend engine if explicit AI signals (like compound names) were detected,
+  // because AI farms often artificially inflate Spotify popularity/followers to cheat the local heuristic.
   const localAnalysis = analyzeTrackFallback(track);
-  if (localAnalysis.label === 'Likely Human' && localAnalysis.aiLikelihood < 25) {
-    console.log(`[Analysis] Local heuristic is highly confident (Likely Human). Skipping Forensic Engine.`);
+  
+  const hasStrongAIFlags = localAnalysis.reasonCodes?.some(code => 
+    ['AI_NAME_KEYWORD', 'AI_COMPOUND_NAME', 'AI_LABEL', 'AI_FARM_PATTERN'].includes(code)
+  );
+
+  if (localAnalysis.label === 'Likely Human' && localAnalysis.aiLikelihood < 25 && !hasStrongAIFlags) {
+    console.log(`[Analysis] Local heuristic is highly confident (Likely Human) with no severe AI flags. Skipping Forensic Engine.`);
     return localAnalysis;
   }
 

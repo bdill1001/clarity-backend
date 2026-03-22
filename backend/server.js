@@ -159,6 +159,14 @@ app.post('/api/analyze', async (req, res) => {
 
     if (cached && !cacheError) {
       console.log(`[Analyze] Cache HIT for artist: ${artistName}. Skipping Gemini.`);
+      
+      if (cached.ai_likelihood >= 65) {
+         // Auto-sync older records that missed the threshold to the Registry
+         const artistData = await getArtistData(accessToken, artistId);
+         const artistImage = artistData?.images?.[0]?.url || null;
+         await updateRegistryFromAnalysis(artistId, artistName, cached.ai_likelihood, artistImage);
+      }
+      
       return res.json({
         trackId: trackId,
         aiLikelihood: cached.ai_likelihood,
@@ -700,6 +708,12 @@ async function pollUsers() {
           
         if (cached) {
           console.log(`[Worker] Cache HIT for artist: ${artistName}. Skipping Gemini.`);
+          
+          if (cached.ai_likelihood >= 65) {
+            const artistImage = artistData?.images?.[0]?.url || null;
+            await updateRegistryFromAnalysis(artistId, artistName, cached.ai_likelihood, artistImage);
+          }
+
           analysis = {
             aiLikelihood: cached.ai_likelihood,
             label: cached.label,
@@ -726,7 +740,8 @@ async function pollUsers() {
             updated_at: new Date().toISOString()
           }, { onConflict: 'artist_id' });
           
-          await updateRegistryFromAnalysis(artistId, artistName, analysis.aiLikelihood);
+          const artistImage = artistData?.images?.[0]?.url || null;
+          await updateRegistryFromAnalysis(artistId, artistName, analysis.aiLikelihood, artistImage);
         }
       }
 
