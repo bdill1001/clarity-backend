@@ -11,6 +11,7 @@ import {
   Platform,
   RefreshControl,
   ScrollView,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Database, Search, Globe, ExternalLink, Bot, User, CheckCircle2 } from 'lucide-react-native';
@@ -23,6 +24,7 @@ interface RegistryArtist {
   artist_id: string;
   artist_name: string;
   trust_score: number;
+  artist_image?: string;
 }
 
 interface ScanResult {
@@ -137,14 +139,24 @@ export default function RegistryScreen() {
 
   const renderDirectoryItem = ({ item, index }: { item: RegistryArtist; index: number }) => (
     <View style={styles.wallItem}>
-      <View style={styles.wallItemRank}>
-        <Text style={styles.wallItemRankText}>#{index + 1}</Text>
-      </View>
+      <Text style={styles.wallItemRankText}>#{index + 1}</Text>
+      
+      {item.artist_image ? (
+        <Image source={{ uri: item.artist_image }} style={styles.artistAvatar} />
+      ) : (
+        <View style={[styles.artistAvatar, styles.artistAvatarFallback]}>
+          <User size={20} color={Colors.textTertiary} />
+        </View>
+      )}
+
       <View style={styles.wallItemInfo}>
         <Text style={styles.wallItemName} numberOfLines={1}>{item.artist_name}</Text>
-        <Text style={styles.wallItemScore}>Trust Score: {item.trust_score} (Verified AI)</Text>
       </View>
-      <Bot size={20} color={Colors.accent} />
+      
+      <View style={styles.aiBadge}>
+         <Bot size={12} color="#FFF" />
+         <Text style={styles.aiBadgeText}>Verified AI</Text>
+      </View>
     </View>
   );
 
@@ -155,8 +167,7 @@ export default function RegistryScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <View style={styles.header}>
-          <Database size={20} color={Colors.accent} />
-          <Text style={styles.headerTitle}>Global Registry</Text>
+          <Text style={styles.headerTitle}>AI Directory</Text>
         </View>
 
         <FlatList
@@ -177,8 +188,8 @@ export default function RegistryScreen() {
             <>
               {/* Scanner Section */}
               <View style={styles.scannerCard}>
-                <Text style={styles.scannerTitle}>URL Scanner</Text>
-                <Text style={styles.scannerSub}>Submit a Spotify Artist or Track link to force a deep analysis and update the global registry.</Text>
+                <Text style={styles.scannerTitle}>Manual Scan</Text>
+                <Text style={styles.scannerSub}>Paste a Spotify link to run an immediate forensic analysis.</Text>
                 
                 <View style={styles.inputRow}>
                   <View style={styles.inputContainer}>
@@ -221,11 +232,11 @@ export default function RegistryScreen() {
                     <Text style={styles.resultArtistName}>{scanResult.artistName}</Text>
                     <Text style={styles.resultTrackName}>"{scanResult.trackName}"</Text>
                     <View style={styles.resultLabelRow}>
-                      {scanResult.label === 'Likely AI' && <Bot size={16} color={Colors.accent} style={{marginRight: 6}}/>}
+                      {scanResult.label === 'Likely AI' && <Bot size={16} color={Colors.ai} style={{marginRight: 6}}/>}
                       {scanResult.label === 'Likely Human' && <User size={16} color={Colors.human} style={{marginRight: 6}}/>}
                       <Text style={[
                         styles.resultLabel,
-                        scanResult.label === 'Likely AI' ? {color: Colors.accent} :
+                        scanResult.label === 'Likely AI' ? {color: Colors.ai} :
                         scanResult.label === 'Likely Human' ? {color: Colors.human} : null
                       ]}>{scanResult.label}</Text>
                     </View>
@@ -235,7 +246,7 @@ export default function RegistryScreen() {
 
               {/* Leaderboard Header */}
               <View style={styles.boardHeader}>
-                <Text style={styles.boardTitle}>Verified AI Directory</Text>
+                <Text style={styles.boardTitle}>Verified AI Artists</Text>
                 <Text style={styles.boardSub}>Artists verified as utilizing AI generation through community consensus and AI analysis.</Text>
               </View>
             </>
@@ -276,7 +287,6 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontSize: 24,
     fontWeight: '700',
-    marginLeft: 12,
     letterSpacing: 0.5,
   },
   list: {
@@ -290,8 +300,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderRadius: 16,
     padding: 20,
-    borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
     marginBottom: 32,
   },
   scannerTitle: {
@@ -317,8 +325,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: Colors.background,
     borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
     paddingHorizontal: 12,
     height: 48,
   },
@@ -331,7 +337,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   scanButton: {
-    backgroundColor: Colors.accent,
+    backgroundColor: Colors.ai,
     height: 48,
     paddingHorizontal: 20,
     borderRadius: 8,
@@ -363,15 +369,15 @@ const styles = StyleSheet.create({
     padding: 16,
     backgroundColor: Colors.background,
     borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
   },
   resultBoxDanger: {
-    backgroundColor: 'rgba(216, 180, 254, 0.05)',
-    borderColor: 'rgba(216, 180, 254, 0.3)',
+    backgroundColor: 'rgba(168, 85, 247, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(168, 85, 247, 0.3)',
   },
   resultBoxSafe: {
     backgroundColor: 'rgba(48, 209, 88, 0.05)',
+    borderWidth: 1,
     borderColor: 'rgba(48, 209, 88, 0.3)',
   },
   resultArtistName: {
@@ -415,38 +421,49 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: Colors.surface,
     padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.surfaceBorder,
+    paddingLeft: 20,
+    borderRadius: 16,
     marginBottom: 12,
-  },
-  wallItemRank: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: Colors.background,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
   },
   wallItemRankText: {
     color: Colors.textSecondary,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '700',
+    width: 28,
+  },
+  artistAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    marginRight: 12,
+    backgroundColor: Colors.background,
+  },
+  artistAvatarFallback: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   wallItemInfo: {
     flex: 1,
+    marginRight: 8,
   },
   wallItemName: {
     color: '#FFF',
     fontSize: 16,
     fontWeight: '600',
-    marginBottom: 4,
   },
-  wallItemScore: {
-    color: Colors.accent,
-    fontSize: 13,
-    fontWeight: '500',
+  aiBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.ai,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  aiBadgeText: {
+    color: '#FFF',
+    fontSize: 11,
+    fontWeight: '700',
+    marginLeft: 4,
   },
   emptyBoard: {
     alignItems: 'center',

@@ -484,10 +484,12 @@ function analyzeTrackFallback(track: Track): AnalysisResult {
     codes.push('AI_LABEL');
   }
 
-  score -= heuristics.humanNameScore;
-  if (heuristics.humanNameScore >= 15) {
-    reasons.push(`Artist name follows a typical human naming pattern (note: AI can also use human-sounding names)`);
+  if (heuristics.humanNameScore >= 15 && heuristics.nameAiCompoundScore === 0 && heuristics.nameAiKeywordScore === 0) {
+    score -= heuristics.humanNameScore;
+    reasons.push(`Artist name follows a typical human naming pattern`);
     codes.push('HUMAN_NAME_PATTERN');
+  } else if (heuristics.humanNameScore >= 15) {
+    reasons.push(`Artist uses a human-sounding structure, but matched known AI generation patterns.`);
   }
 
   if (track.enrichmentComplete) {
@@ -605,14 +607,17 @@ function analyzeTrackFallback(track: Track): AnalysisResult {
   };
 }
 
-export function getLabelColor(label: AnalysisResult['label']): string {
+export function getLabelColor(label: AnalysisResult['label'] | string): string {
   switch (label) {
     case 'Likely Human':
       return '#00D4AA';
     case 'Unsure':
+    case 'Uncertain':
       return '#FFB347';
     case 'Likely AI':
       return '#A855F7'; // Neutral Purple
+    default:
+      return '#5C5C6F'; // Fallback textTertiary color to prevent LinearGradient crash
   }
 }
 

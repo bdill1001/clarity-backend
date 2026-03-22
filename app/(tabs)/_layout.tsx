@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { Radio, Clock, Settings, Database } from 'lucide-react-native';
+import { Radio, Clock, Settings, Library } from 'lucide-react-native';
 import React from 'react';
 import Colors from '@/constants/colors';
 
@@ -36,10 +36,10 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="registry"
+        name="registry/index"
         options={{
           title: 'Registry',
-          tabBarIcon: ({ color, size }) => <Database size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => <Library size={size} color={color} />,
         }}
       />
       <Tabs.Screen
